@@ -49,9 +49,9 @@
     }
   ],
   "connections": {
-    "When called by another workflow": { "main": [[{ "node": "Validate input",     "type": "main", "index": 0 }]] },
-    "Validate input":                  { "main": [[{ "node": "Toolbox /ssh/exec", "type": "main", "index": 0 }]] },
-    "Toolbox /ssh/exec":               { "main": [[{ "node": "Shape for tool consumer", "type": "main", "index": 0 }]] }
+    "trigger": { "main": [[{ "node": "validate", "type": "main", "index": 0 }]] },
+    "validate": { "main": [[{ "node": "toolbox-call", "type": "main", "index": 0 }]] },
+    "toolbox-call": { "main": [[{ "node": "shape", "type": "main", "index": 0 }]] }
   },
   "settings": { "executionOrder": "v1" },
   "tags": [{ "name": "terry" }, { "name": "subworkflow" }]
