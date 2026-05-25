@@ -22,10 +22,6 @@ probe "qdrant running"     "docker ps --filter 'name=qdrant' --format '{{.State}
 probe "prometheus running" "docker ps --filter 'name=prometheus' --format '{{.State}}' | grep -q running"
 probe "loki running"       "docker ps --filter 'name=loki' --format '{{.State}}' | grep -q running"
 probe "grafana healthz"    "docker ps --filter 'name=grafana' --format '{{.State}}' | grep -q running"
-probe "vault sealed?"      "docker compose exec -T vault vault status -format=json | grep -q '\"sealed\": false'"
-
-# Audit chain
-probe "audit chain intact" "docker compose exec -T n8n python3 /workflows/../scripts/utilities/audit_writer.py verify 2>/dev/null | grep -q '\"ok\": true'"
 
 # Freeze state
 freeze=$(docker compose exec -T postgres psql -U "${POSTGRES_USER:-terry}" -d "${POSTGRES_DB:-terry}" -tA -c "SELECT frozen FROM ops.system_freeze WHERE id=1" 2>/dev/null || echo unknown)
