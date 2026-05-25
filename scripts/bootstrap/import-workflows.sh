@@ -14,7 +14,9 @@ fi
 
 for f in "${files[@]}"; do
   echo ">> importing $f"
-  docker compose cp "$f" n8n:/tmp/wf.json
+  # Add UUID id if missing (n8n requires it)
+  python3 -c "import json,uuid,sys;wf=json.load(open(sys.argv[1]));wf.setdefault('id',str(uuid.uuid4()));json.dump(wf,open('/tmp/wf_temp.json','w'),indent=2)" "$f"
+  docker compose cp /tmp/wf_temp.json n8n:/tmp/wf.json
   docker compose exec -T n8n n8n import:workflow --input=/tmp/wf.json
 done
 
