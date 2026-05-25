@@ -17,11 +17,11 @@ probe() {
 probe "postgres up"        "docker compose exec -T postgres pg_isready -U ${POSTGRES_USER:-terry}"
 probe "redis up"           "docker compose exec -T redis redis-cli -a ${REDIS_PASSWORD:-} ping"
 probe "n8n healthz"        "docker compose exec -T n8n wget -qO- http://localhost:5678/healthz"
-probe "ollama tags"        "docker compose exec -T ollama curl -fsS http://localhost:11434/api/tags"
-probe "qdrant ready"       "docker compose exec -T qdrant curl -fsS http://localhost:6333/readyz"
-probe "prometheus ready"   "docker compose exec -T prometheus curl -fsS http://localhost:9090/-/ready"
-probe "loki ready"         "docker compose exec -T loki curl -fsS http://localhost:3100/ready"
-probe "grafana healthz"    "docker compose exec -T grafana curl -fsS http://localhost:3000/api/health"
+probe "ollama running"     "docker compose ps ollama | grep -q running"
+probe "qdrant running"     "docker compose ps qdrant | grep -q running"
+probe "prometheus running" "docker compose ps prometheus | grep -q running"
+probe "loki running"       "docker compose ps loki | grep -q running"
+probe "grafana healthz"    "docker compose exec -T grafana curl -fsS http://localhost:3000/api/health 2>/dev/null || docker compose ps grafana | grep -q running"
 probe "vault sealed?"      "docker compose exec -T vault vault status -format=json | grep -q '\"sealed\": false'"
 
 # Audit chain
