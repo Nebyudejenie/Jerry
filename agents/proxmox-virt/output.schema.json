@@ -1,0 +1,33 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "proxmox-virt-output",
+  "type": "object",
+  "required": ["answer", "cluster_state", "evidence", "needs_approval"],
+  "additionalProperties": false,
+  "properties": {
+    "answer": { "type": "string" },
+    "cluster_state": {
+      "type": "object",
+      "required": ["nodes_online", "quorum"],
+      "additionalProperties": false,
+      "properties": {
+        "nodes_online": { "type": "integer", "minimum": 0 },
+        "quorum":       { "enum": ["ok", "degraded", "unknown"] }
+      }
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["cmd", "summary"],
+        "additionalProperties": false,
+        "properties": {
+          "cmd":     { "type": "string", "pattern": "^pvesh|^qm|^pct|^pvecm" },
+          "summary": { "type": "string", "maxLength": 1000 }
+        }
+      }
+    },
+    "proposed_action": { "type": ["string", "null"] },
+    "needs_approval":  { "type": "boolean" }
+  }
+}

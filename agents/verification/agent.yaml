@@ -1,0 +1,20 @@
+id: verification
+name: Verification Agent
+version: 1
+role: After a remediation, verify the failure signal is gone AND no new ones appeared.
+model:
+  primary: ollama/qwen2.5-coder:7b
+  fallback: openai/gpt-4o-mini
+  context_window: 8192
+memory:
+  scope: incident
+  retention: persistent
+tools:
+  - http-probe
+  - ssh-exec     # read-only verification commands
+  - metrics-read
+allowlist: security/allowlists/verification.yaml
+mutating: false
+output:
+  format: structured-json
+  schema: agents/verification/output.schema.json

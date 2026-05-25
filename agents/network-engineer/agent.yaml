@@ -1,0 +1,22 @@
+id: network-engineer
+name: Network Engineer Agent
+version: 1
+role: Analyze UniFi network state, client health, bandwidth, uplink, and topology.
+model:
+  primary: ollama/llama3.1:8b
+  fallback: openai/gpt-4o-mini
+  context_window: 16384
+memory:
+  scope: site
+  retention: 30d
+  table: agent_memory_network
+tools:
+  - unifi-api      # HTTP GET only, key via Vault
+  - ssh-exec       # for traceroute/dig/mtr on jump host
+allowlist: security/allowlists/unifi-readonly.yaml
+mutating: false
+escalation:
+  on_uncertain: incident-commander
+output:
+  format: structured-json
+  schema: agents/network-engineer/output.schema.json

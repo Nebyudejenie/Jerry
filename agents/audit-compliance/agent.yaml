@@ -1,0 +1,17 @@
+id: audit-compliance
+name: Audit & Compliance Agent
+version: 1
+role: Not a chat agent. A deterministic write-through that appends every action to the immutable ledger and re-hashes the chain.
+model: none
+memory:
+  scope: ledger
+  retention: forever
+  table: audit_log
+tools:
+  - postgres-append-only
+allowlist: security/allowlists/audit.yaml
+mutating: ledger-only
+output:
+  format: structured-json
+  schema: agents/audit-compliance/output.schema.json
+implementation: scripts/utilities/audit_writer.py

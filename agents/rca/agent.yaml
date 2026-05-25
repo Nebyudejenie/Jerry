@@ -1,0 +1,19 @@
+id: rca
+name: Root Cause Analysis Agent
+version: 1
+role: Synthesize evidence from specialists into a single narrative root cause + 5-whys.
+model:
+  primary: ollama/qwen2.5-coder:7b
+  fallback: openai/gpt-4o-mini
+  context_window: 32768
+memory:
+  scope: incident
+  retention: persistent
+tools:
+  - qdrant-search    # RAG over past RCAs
+  - postgres-query   # incident_events read
+allowlist: security/allowlists/rca.yaml
+mutating: false
+output:
+  format: structured-json
+  schema: agents/rca/output.schema.json

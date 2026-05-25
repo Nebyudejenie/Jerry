@@ -1,0 +1,26 @@
+role: security-readonly
+mutating: false
+targets: ["*"]
+commands:
+  - id: journalctl-ssh-failures
+    match: ^journalctl -u ssh --since (1h|6h|24h|7d) --no-pager$
+  - id: journalctl-sudo
+    match: ^journalctl _COMM=sudo --since (1h|6h|24h|7d) --no-pager$
+  - id: who
+    match: ^who$
+  - id: last-fail
+    match: ^lastb -n (10|20|50)$
+  - id: world-writable-etc
+    match: ^find /etc -perm -0002 -type f -not -path '\*/lost\+found/\*'$
+  - id: suid-find
+    match: ^find / -xdev -perm -4000 -type f -not -path '/proc/\*'$
+  - id: ss-tnp
+    match: ^ss -tnp$
+  - id: crontab-list
+    match: ^crontab -u [a-zA-Z0-9_-]+ -l$
+  - id: ls-cron-d
+    match: ^ls -la /etc/cron\.(d|hourly|daily|weekly|monthly)$
+  - id: cat-passwd
+    match: ^cat /etc/passwd$
+  - id: cat-shadow-stat
+    match: ^stat /etc/shadow$

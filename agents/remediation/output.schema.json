@@ -1,0 +1,18 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "remediation-output",
+  "type": "object",
+  "required": ["order_id", "executed", "exit_code", "duration_ms", "audit_id", "rollback_available"],
+  "additionalProperties": false,
+  "properties": {
+    "order_id":           { "type": "string", "format": "uuid" },
+    "executed":           { "type": "boolean" },
+    "exit_code":          { "type": "integer" },
+    "stdout_snippet":     { "type": "string", "maxLength": 4096 },
+    "stderr_snippet":     { "type": "string", "maxLength": 4096 },
+    "duration_ms":        { "type": "integer", "minimum": 0 },
+    "audit_id":           { "type": "string", "format": "uuid" },
+    "rollback_available": { "type": "boolean" },
+    "rollback_command":   { "type": ["string", "null"] }
+  }
+}

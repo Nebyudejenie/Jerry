@@ -1,0 +1,52 @@
+{
+  "uid": "terry-overview",
+  "title": "Terry · Overview",
+  "schemaVersion": 39,
+  "version": 1,
+  "tags": ["terry"],
+  "timezone": "browser",
+  "time": { "from": "now-6h", "to": "now" },
+  "refresh": "30s",
+  "panels": [
+    {
+      "id": 1, "type": "stat", "title": "Open incidents",
+      "gridPos": { "x": 0, "y": 0, "w": 6, "h": 4 },
+      "datasource": { "type": "postgres", "uid": "Postgres-Terry" },
+      "targets": [{ "rawSql": "SELECT count(*) AS value FROM ops.incidents WHERE state <> 'closed'", "format": "table" }],
+      "options": { "graphMode": "area", "reduceOptions": { "fields": "/^value$/", "values": false, "calcs": ["lastNotNull"] } }
+    },
+    {
+      "id": 2, "type": "stat", "title": "System freeze",
+      "gridPos": { "x": 6, "y": 0, "w": 6, "h": 4 },
+      "datasource": { "type": "postgres", "uid": "Postgres-Terry" },
+      "targets": [{ "rawSql": "SELECT case when frozen then 'FROZEN' else 'live' end AS value FROM ops.system_freeze WHERE id=1", "format": "table" }]
+    },
+    {
+      "id": 3, "type": "timeseries", "title": "Targets — status over time",
+      "gridPos": { "x": 0, "y": 4, "w": 24, "h": 8 },
+      "datasource": { "type": "postgres", "uid": "Postgres-Terry" },
+      "targets": [{
+        "rawSql": "SELECT ts AS time, target_id AS metric, case status when 'up' then 1 when 'degraded' then 0.5 else 0 end AS value FROM monitoring.status WHERE $__timeFilter(ts) ORDER BY ts",
+        "format": "time_series"
+      }]
+    },
+    {
+      "id": 4, "type": "timeseries", "title": "Terry router — latency p95 by model",
+      "gridPos": { "x": 0, "y": 12, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus" },
+      "targets": [{ "expr": "terry_router_latency_ms_p95", "legendFormat": "{{model}}" }]
+    },
+    {
+      "id": 5, "type": "timeseries", "title": "Terry router — error rate",
+      "gridPos": { "x": 12, "y": 12, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus" },
+      "targets": [{ "expr": "rate(terry_router_errors_total[5m])", "legendFormat": "{{model}}" }]
+    },
+    {
+      "id": 6, "type": "logs", "title": "Loki — Terry container logs",
+      "gridPos": { "x": 0, "y": 20, "w": 24, "h": 10 },
+      "datasource": { "type": "loki" },
+      "targets": [{ "expr": "{container=~\"n8n|n8n-worker|n8n-webhook|ollama|terry-router|terry-toolbox|postgres|qdrant|redis|vault\"}" }]
+    }
+  ]
+}

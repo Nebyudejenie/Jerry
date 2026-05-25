@@ -1,0 +1,152 @@
+{
+  "name": "Terry · Disk Pressure Remediation (gated)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "terry/remediation/disk-pressure",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "hook",
+      "name": "Disk-pressure webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [200, 320]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT frozen FROM ops.system_freeze WHERE id=1"
+      },
+      "id": "freeze-check",
+      "name": "Freeze check",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [400, 320]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            { "id": "c1", "leftValue": "={{ $json.frozen }}", "rightValue": false, "operator": { "type": "boolean", "operation": "false" } }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "not-frozen",
+      "name": "Not frozen?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [600, 320]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.TOOLBOX_URL }}/ssh/exec",
+        "method": "POST",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ role: 'linux-readonly', target: $('Disk-pressure webhook').first().json.target, argv: ['df', '-hT'], incident_id: $('Disk-pressure webhook').first().json.incident_id, dry_run: false }) }}",
+        "options": { "timeout": 70000, "response": { "response": { "neverError": true } } }
+      },
+      "id": "baseline-df",
+      "name": "Baseline df",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [800, 240]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.N8N_INTERNAL_URL }}/webhook/terry/approval",
+        "method": "POST",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"incident_id\": \"{{ $('Disk-pressure webhook').first().json.incident_id }}\",\n  \"command\": \"docker system prune -f\",\n  \"target\": \"{{ $('Disk-pressure webhook').first().json.target }}\",\n  \"requested_by\": \"agent:disk-pressure\",\n  \"baseline\": {{ JSON.stringify(JSON.parse($json.stdout)) }}\n}"
+      },
+      "id": "req-approval-1",
+      "name": "Request approval: prune",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1000, 240]
+    },
+    {
+      "parameters": {
+        "amount": 30,
+        "unit": "seconds"
+      },
+      "id": "wait-prune",
+      "name": "Wait 30s after prune",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [1200, 240]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.TOOLBOX_URL }}/ssh/exec",
+        "method": "POST",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ role: 'linux-readonly', target: $('Disk-pressure webhook').first().json.target, argv: ['df', '-hT'], incident_id: $('Disk-pressure webhook').first().json.incident_id, dry_run: false }) }}",
+        "options": { "timeout": 70000, "response": { "response": { "neverError": true } } }
+      },
+      "id": "post-df",
+      "name": "Post-prune df",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1400, 240]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.N8N_INTERNAL_URL }}/webhook/terry/approval",
+        "method": "POST",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"incident_id\": \"{{ $('Disk-pressure webhook').first().json.incident_id }}\",\n  \"command\": \"journalctl --vacuum-size=2G\",\n  \"target\": \"{{ $('Disk-pressure webhook').first().json.target }}\",\n  \"requested_by\": \"agent:disk-pressure\",\n  \"note\": \"prune was insufficient; requesting log vacuum\"\n}"
+      },
+      "id": "req-approval-2",
+      "name": "Escalate: vacuum journals",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1600, 140]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $env.TELEGRAM_CHAT_ID }}",
+        "text": "=💾 Disk pressure on *{{ $('Disk-pressure webhook').first().json.target }}* resolved after prune."
+      },
+      "id": "tg-resolved",
+      "name": "TG: resolved",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1600, 340]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $env.TELEGRAM_CHAT_ID }}",
+        "text": "=🚫 *Disk-pressure remediation blocked* — system_freeze active."
+      },
+      "id": "tg-frozen",
+      "name": "TG: frozen",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [800, 460]
+    }
+  ],
+  "connections": {
+    "Disk-pressure webhook": { "main": [[{ "node": "Freeze check", "type": "main", "index": 0 }]] },
+    "Freeze check":          { "main": [[{ "node": "Not frozen?",  "type": "main", "index": 0 }]] },
+    "Not frozen?":           { "main": [
+      [{ "node": "Baseline df", "type": "main", "index": 0 }],
+      [{ "node": "TG: frozen",  "type": "main", "index": 0 }]
+    ]},
+    "Baseline df":             { "main": [[{ "node": "Request approval: prune", "type": "main", "index": 0 }]] },
+    "Request approval: prune": { "main": [[{ "node": "Wait 30s after prune",     "type": "main", "index": 0 }]] },
+    "Wait 30s after prune":    { "main": [[{ "node": "Post-prune df",            "type": "main", "index": 0 }]] },
+    "Post-prune df":           { "main": [
+      [{ "node": "Escalate: vacuum journals", "type": "main", "index": 0 }, { "node": "TG: resolved", "type": "main", "index": 0 }]
+    ]}
+  },
+  "settings": { "executionOrder": "v1" },
+  "tags": [{ "name": "terry" }, { "name": "remediation" }, { "name": "disk" }]
+}

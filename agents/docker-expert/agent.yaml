@@ -1,0 +1,21 @@
+id: docker-expert
+name: Docker Expert Agent
+version: 1
+role: Diagnose container, image, network, and volume issues.
+model:
+  primary: ollama/qwen2.5-coder:7b
+  fallback: openai/gpt-4o-mini
+  context_window: 16384
+memory:
+  scope: session
+  retention: 7d
+  table: agent_memory_docker
+tools:
+  - ssh-exec
+allowlist: security/allowlists/docker-readonly.yaml
+mutating: false
+escalation:
+  on_uncertain: incident-commander
+output:
+  format: structured-json
+  schema: agents/docker-expert/output.schema.json

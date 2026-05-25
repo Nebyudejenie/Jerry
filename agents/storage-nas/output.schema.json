@@ -1,0 +1,36 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "storage-nas-output",
+  "type": "object",
+  "required": ["overall", "areas", "actions_recommended", "needs_approval"],
+  "additionalProperties": false,
+  "definitions": {
+    "area": {
+      "type": "object",
+      "required": ["status", "detail"],
+      "additionalProperties": false,
+      "properties": {
+        "status": { "enum": ["ok", "warn", "fail"] },
+        "detail": { "type": "string", "maxLength": 1000 }
+      }
+    }
+  },
+  "properties": {
+    "overall": { "enum": ["Healthy", "Warning", "Critical"] },
+    "areas": {
+      "type": "object",
+      "required": ["boot_errors", "drives", "capacity", "smart", "raid", "io"],
+      "additionalProperties": false,
+      "properties": {
+        "boot_errors": { "$ref": "#/definitions/area" },
+        "drives":      { "$ref": "#/definitions/area" },
+        "capacity":    { "$ref": "#/definitions/area" },
+        "smart":       { "$ref": "#/definitions/area" },
+        "raid":        { "$ref": "#/definitions/area" },
+        "io":          { "$ref": "#/definitions/area" }
+      }
+    },
+    "actions_recommended": { "type": "array", "items": { "type": "string" } },
+    "needs_approval":      { "type": "boolean" }
+  }
+}

@@ -1,0 +1,24 @@
+.env
+.env.local
+.env.runtime
+.env.*.local
+*.log
+__pycache__/
+*.pyc
+.venv/
+node_modules/
+.DS_Store
+volumes/
+*.tfstate*
+.terraform/
+*.key
+*.pem
+acme.json
+backups/
+
+# secrets/ — keep the directory + README + .gitkeep, ignore everything else
+secrets/**
+!secrets/
+!secrets/README.md
+!secrets/ssh/
+!secrets/ssh/.gitkeep

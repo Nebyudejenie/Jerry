@@ -1,0 +1,21 @@
+id: storage-nas
+name: Storage / NAS Agent
+version: 1
+role: Read-only health check of NAS appliances (ZimaCube / TrueNAS / Synology).
+model:
+  primary: ollama/qwen2.5-coder:7b
+  fallback: openai/gpt-4o-mini
+  context_window: 16384
+memory:
+  scope: nas
+  retention: 30d
+  table: agent_memory_nas
+tools:
+  - ssh-exec
+allowlist: security/allowlists/nas-readonly.yaml
+mutating: false
+escalation:
+  on_uncertain: incident-commander
+output:
+  format: structured-json
+  schema: agents/storage-nas/output.schema.json

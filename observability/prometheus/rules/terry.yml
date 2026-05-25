@@ -1,0 +1,58 @@
+groups:
+  - name: terry-infra
+    interval: 30s
+    rules:
+      - alert: HostDown
+        expr: up{job="node"} == 0
+        for: 2m
+        labels: { severity: critical }
+        annotations:
+          summary: "Node exporter down on {{ $labels.instance }}"
+
+      - alert: DiskPressure
+        expr: (node_filesystem_avail_bytes{fstype!~"tmpfs|overlay"} / node_filesystem_size_bytes) < 0.15
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: "Disk <15% free on {{ $labels.instance }} {{ $labels.mountpoint }}"
+
+      - alert: HighMemory
+        expr: (1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) > 0.90
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: "Memory >90% on {{ $labels.instance }}"
+
+      - alert: ContainerRestarting
+        expr: rate(container_restart_count[5m]) > 0
+        for: 1m
+        labels: { severity: warning }
+        annotations:
+          summary: "Container {{ $labels.name }} restarting"
+
+  - name: terry-router
+    interval: 30s
+    rules:
+      - alert: RouterErrorRate
+        expr: rate(terry_router_errors_total[5m]) / rate(terry_router_requests_total[5m]) > 0.10
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: "Terry router error rate >10% for model {{ $labels.model }}"
+
+      - alert: RouterLatencyHigh
+        expr: terry_router_latency_ms_p95 > 30000
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: "Terry router p95 latency >30s for {{ $labels.model }}"
+
+  - name: terry-incidents
+    interval: 1m
+    rules:
+      - alert: OpenIncidentsHigh
+        expr: terry_open_incidents > 5
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: "More than 5 open Terry incidents"

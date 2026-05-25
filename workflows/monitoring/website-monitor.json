@@ -1,0 +1,212 @@
+{
+  "name": "Terry · Website Monitor (Stage 5 + HITL)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            { "field": "minutes", "minutesInterval": 5 }
+          ]
+        }
+      },
+      "id": "schedule",
+      "name": "Every 5 minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 320]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "p1", "name": "prompt",  "type": "string", "value": "Check if the website is up. If down, investigate but do not fix without approval." },
+            { "id": "p2", "name": "chatId",  "type": "string", "value": "terry-website-monitor" },
+            { "id": "p3", "name": "target_id", "type": "string", "value": "demo-website" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "setvars",
+      "name": "Set vars",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [460, 320]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.prompt }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "={{ $('Load system prompt').first().json.system }}",
+          "maxIterations": 10
+        }
+      },
+      "id": "agent",
+      "name": "Terry agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [900, 320]
+    },
+    {
+      "parameters": {
+        "model": "qwen2.5-coder:7b",
+        "options": { "temperature": 0.1 }
+      },
+      "id": "ollama",
+      "name": "Ollama Chat",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOllama",
+      "typeVersion": 1,
+      "position": [780, 540]
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $json.chatId }}",
+        "tableName": "ops.agent_memory"
+      },
+      "id": "memory",
+      "name": "Postgres memory",
+      "type": "@n8n/n8n-nodes-langchain.memoryPostgresChat",
+      "typeVersion": 1,
+      "position": [900, 540]
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "{\n  \"website_up\": true,\n  \"message\": \"detailed status\",\n  \"applied_fix\": false,\n  \"needs_approval\": false,\n  \"commands_requested\": null\n}"
+      },
+      "id": "parser",
+      "name": "Structured output",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.2,
+      "position": [1020, 540]
+    },
+    {
+      "parameters": {
+        "toolDescription": "Probe a URL. Use only for verification.",
+        "method": "GET",
+        "url": "={{ $fromAI('url', 'URL to probe', 'string') }}",
+        "options": { "redirect": { "redirect": {} }, "response": { "response": { "neverError": true } } }
+      },
+      "id": "http-tool",
+      "name": "http-probe",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [1140, 540]
+    },
+    {
+      "parameters": {
+        "name": "ssh-exec-readonly",
+        "description": "Run a read-only diagnostic on a target host. Provide role and argv. The executor enforces the allowlist.",
+        "workflowId": "={{ $env.WF_SSH_EXEC }}"
+      },
+      "id": "ssh-tool",
+      "name": "ssh-exec tool",
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 1.3,
+      "position": [1260, 540]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT system_prompt AS system FROM ops.agent_definitions WHERE agent_id = 'docker-expert'"
+      },
+      "id": "load-prompt",
+      "name": "Load system prompt",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [680, 320]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            { "id": "c1", "leftValue": "={{ $json.output.needs_approval }}", "rightValue": true, "operator": { "type": "boolean", "operation": "true" } }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "needs-approval-if",
+      "name": "Needs approval?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [1340, 320]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.N8N_INTERNAL_URL }}/webhook/terry/approval",
+        "method": "POST",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"incident_id\": \"{{ $json.output.incident_id || $uuid }}\",\n  \"command\": \"{{ $json.output.commands_requested }}\",\n  \"target\": \"{{ $('Set vars').first().json.target_id }}\",\n  \"requested_by\": \"agent:website-monitor\",\n  \"context\": {{ JSON.stringify($json.output) }}\n}"
+      },
+      "id": "request-approval",
+      "name": "Request approval",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1560, 200]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            { "outputKey": "fixed",   "conditions": { "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" }, "conditions": [ { "id": "r1", "leftValue": "={{ $json.output.applied_fix }}", "rightValue": true, "operator": { "type": "boolean", "operation": "true" } } ], "combinator": "and" } },
+            { "outputKey": "down",    "conditions": { "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" }, "conditions": [ { "id": "r2", "leftValue": "={{ $json.output.website_up }}", "rightValue": false, "operator": { "type": "boolean", "operation": "false" } } ], "combinator": "and" } }
+          ]
+        },
+        "options": { "fallbackOutput": "extra" }
+      },
+      "id": "notify-router",
+      "name": "Notify router",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [1560, 420]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $env.TELEGRAM_CHAT_ID }}",
+        "text": "=✅ Terry fixed *{{ $('Set vars').first().json.target_id }}*\n\n{{ $json.output.message }}",
+        "additionalFields": { "parse_mode": "Markdown" }
+      },
+      "id": "tg-fixed",
+      "name": "TG: fixed",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1820, 360]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $env.TELEGRAM_CHAT_ID }}",
+        "text": "=❌ *{{ $('Set vars').first().json.target_id }}* is DOWN\n\n{{ $json.output.message }}",
+        "additionalFields": { "parse_mode": "Markdown" }
+      },
+      "id": "tg-down",
+      "name": "TG: down",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1820, 480]
+    }
+  ],
+  "connections": {
+    "Every 5 minutes":   { "main": [[{ "node": "Set vars",            "type": "main", "index": 0 }]] },
+    "Set vars":          { "main": [[{ "node": "Load system prompt",  "type": "main", "index": 0 }]] },
+    "Load system prompt":{ "main": [[{ "node": "Terry agent",         "type": "main", "index": 0 }]] },
+    "Ollama Chat":       { "ai_languageModel": [[{ "node": "Terry agent", "type": "ai_languageModel", "index": 0 }]] },
+    "Postgres memory":   { "ai_memory":        [[{ "node": "Terry agent", "type": "ai_memory",        "index": 0 }]] },
+    "Structured output": { "ai_outputParser":  [[{ "node": "Terry agent", "type": "ai_outputParser",  "index": 0 }]] },
+    "http-probe":        { "ai_tool":          [[{ "node": "Terry agent", "type": "ai_tool",          "index": 0 }]] },
+    "ssh-exec tool":     { "ai_tool":          [[{ "node": "Terry agent", "type": "ai_tool",          "index": 0 }]] },
+    "Terry agent":       { "main": [[{ "node": "Needs approval?",     "type": "main", "index": 0 }]] },
+    "Needs approval?":   { "main": [
+      [{ "node": "Request approval", "type": "main", "index": 0 }],
+      [{ "node": "Notify router",    "type": "main", "index": 0 }]
+    ]},
+    "Notify router": { "main": [
+      [{ "node": "TG: fixed", "type": "main", "index": 0 }],
+      [{ "node": "TG: down",  "type": "main", "index": 0 }]
+    ]}
+  },
+  "settings": { "executionOrder": "v1" },
+  "tags": [{ "name": "terry" }, { "name": "monitoring" }]
+}

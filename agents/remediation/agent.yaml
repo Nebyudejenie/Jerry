@@ -1,0 +1,27 @@
+id: remediation
+name: Remediation Agent
+version: 1
+role: The ONLY agent permitted to mutate infrastructure. Strict allowlist, post-approval only.
+model:
+  primary: ollama/qwen2.5-coder:7b
+  fallback: openai/gpt-4o-mini
+  context_window: 8192
+memory:
+  scope: action
+  retention: persistent
+  table: audit_log
+tools:
+  - ssh-exec-write     # gated by remediation.yaml allowlist
+  - audit-write        # mandatory; writes to audit_log
+allowlist: security/allowlists/remediation.yaml
+mutating: true
+preconditions:
+  - approved_by_human: true
+  - system_freeze: false
+  - dry_run_passed: true
+escalation:
+  on_nonzero_exit: incident-commander
+  on_allowlist_reject: incident-commander
+output:
+  format: structured-json
+  schema: agents/remediation/output.schema.json

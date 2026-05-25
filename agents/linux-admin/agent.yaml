@@ -1,0 +1,23 @@
+id: linux-admin
+name: Linux Administrator Agent
+version: 1
+role: Investigate Linux host issues using read-only shell tools.
+model:
+  primary: ollama/qwen2.5-coder:7b
+  fallback: openai/gpt-4o-mini
+  context_window: 16384
+memory:
+  scope: session
+  retention: 7d
+  table: agent_memory_linux
+tools:
+  - ssh-exec      # via security/allowlists/linux-readonly.yaml
+  - metrics-read
+allowlist: security/allowlists/linux-readonly.yaml
+mutating: false
+escalation:
+  on_uncertain: incident-commander
+  on_blocked_command: incident-commander
+output:
+  format: structured-json
+  schema: agents/linux-admin/output.schema.json

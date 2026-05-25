@@ -1,0 +1,88 @@
+{
+  "name": "Terry · Target Heartbeat (every 1m)",
+  "nodes": [
+    {
+      "parameters": { "rule": { "interval": [ { "field": "minutes", "minutesInterval": 1 } ] } },
+      "id": "schedule",
+      "name": "Every 1 minute",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [200, 320]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT target_id, kind, endpoint, expected FROM monitoring.targets WHERE enabled AND (interval_seconds <= 60 OR (extract(epoch FROM now())::int) % interval_seconds < 60)"
+      },
+      "id": "load-targets",
+      "name": "Load due targets",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [420, 320]
+    },
+    {
+      "parameters": { "mode": "each", "batchSize": 1, "options": {} },
+      "id": "split",
+      "name": "Per target",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [620, 320]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.kind === 'http' ? $json.endpoint : '' }}",
+        "options": { "response": { "response": { "neverError": true, "fullResponse": true } }, "timeout": 5000 }
+      },
+      "id": "probe-http",
+      "name": "HTTP probe",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [820, 220]
+    },
+    {
+      "parameters": {
+        "command": "=nc -zv -w 3 {{ $json.endpoint.split(':')[0] }} {{ $json.endpoint.split(':')[1] }} 2>&1 || echo DOWN"
+      },
+      "id": "probe-tcp",
+      "name": "TCP probe",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [820, 420]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO monitoring.status(target_id, status, latency_ms, evidence) VALUES ($1, $2, $3, $4)",
+        "options": { "queryReplacement": "={{ $('Per target').first().json.target_id }},={{ $json.status }},={{ $json.latency_ms }},={{ $json.evidence }}" }
+      },
+      "id": "write-status",
+      "name": "Write status",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [1240, 320]
+    },
+    {
+      "parameters": {
+        "jsCode": "const t = $('Per target').first().json;\nconst now = Date.now();\nconst res = $input.first().json;\nlet status='down', latency=null, evidence='';\nif (t.kind === 'http') {\n  const body = typeof res.body === 'string' ? res.body : JSON.stringify(res.body || '');\n  const ok = res.statusCode >= 200 && res.statusCode < 300 && (!t.expected || body.includes(t.expected));\n  status = ok ? 'up' : 'down';\n  latency = res.elapsedTime || null;\n  evidence = `code=${res.statusCode} bodyLen=${body.length}`;\n} else if (t.kind === 'tcp') {\n  status = res.stdout && res.stdout.includes('succeeded') ? 'up' : 'down';\n  evidence = (res.stdout || res.stderr || '').slice(0, 500);\n}\nreturn [{ json: { target_id: t.target_id, status, latency_ms: latency, evidence } }];"
+      },
+      "id": "normalize",
+      "name": "Normalize result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1040, 320]
+    }
+  ],
+  "connections": {
+    "Every 1 minute":  { "main": [[{ "node": "Load due targets", "type": "main", "index": 0 }]] },
+    "Load due targets":{ "main": [[{ "node": "Per target", "type": "main", "index": 0 }]] },
+    "Per target":      { "main": [
+      [{ "node": "HTTP probe", "type": "main", "index": 0 }, { "node": "TCP probe", "type": "main", "index": 0 }]
+    ]},
+    "HTTP probe":      { "main": [[{ "node": "Normalize result", "type": "main", "index": 0 }]] },
+    "TCP probe":       { "main": [[{ "node": "Normalize result", "type": "main", "index": 0 }]] },
+    "Normalize result":{ "main": [[{ "node": "Write status", "type": "main", "index": 0 }]] },
+    "Write status":    { "main": [[{ "node": "Per target", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "tags": [{ "name": "terry" }, { "name": "monitoring" }]
+}

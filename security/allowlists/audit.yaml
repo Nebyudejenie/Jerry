@@ -1,0 +1,5 @@
+role: audit
+mutating: false
+# Audit writer is DB-only, no shell. Placeholder for executor coverage.
+targets: []
+commands: []

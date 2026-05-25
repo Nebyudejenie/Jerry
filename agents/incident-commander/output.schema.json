@@ -1,0 +1,26 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "incident-commander-output",
+  "type": "object",
+  "required": ["incident_id", "phase", "actions", "needs_approval", "summary_for_human"],
+  "additionalProperties": false,
+  "properties": {
+    "incident_id": { "type": "string", "format": "uuid" },
+    "phase": { "enum": ["intake", "dispatch", "synthesize", "plan", "approve", "execute", "verify", "close"] },
+    "actions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["agent", "input"],
+        "additionalProperties": false,
+        "properties": {
+          "agent": { "enum": ["monitoring", "linux-admin", "docker-expert", "network-engineer", "proxmox-virt", "storage-nas", "security-analyst", "rca", "remediation", "verification"] },
+          "input": { "type": "object" }
+        }
+      }
+    },
+    "needs_approval":    { "type": "boolean" },
+    "approval_payload":  { "type": ["object", "null"] },
+    "summary_for_human": { "type": "string", "maxLength": 1000 }
+  }
+}

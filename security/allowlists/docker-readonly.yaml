@@ -1,0 +1,38 @@
+role: docker-readonly
+mutating: false
+targets: ["*"]
+commands:
+  - id: ps-all
+    match: ^docker ps -a$
+  - id: ps-all-formatted
+    match: ^docker ps -a --format \{\{\.Names\}\}\\t\{\{\.Status\}\}\\t\{\{\.Ports\}\}$
+  - id: ps-running
+    match: ^docker ps$
+  - id: inspect-state
+    match: ^docker inspect [a-zA-Z0-9_.-]+ --format \{\{\.State\.Status\}\}\|\{\{\.State\.ExitCode\}\}\|\{\{\.State\.Error\}\}$
+  - id: inspect-mounts
+    match: ^docker inspect [a-zA-Z0-9_.-]+ --format \{\{json \.Mounts\}\}$
+  - id: inspect-networks
+    match: ^docker inspect [a-zA-Z0-9_.-]+ --format \{\{json \.NetworkSettings\.Networks\}\}$
+  - id: logs-tail
+    match: ^docker logs [a-zA-Z0-9_.-]+ --tail (10|50|100|200) --timestamps$
+  - id: events-since
+    match: ^docker events --since (1m|5m|10m|30m|1h) --until 0s$
+  - id: stats-no-stream
+    match: ^docker stats --no-stream --format \{\{\.Name\}\}\\t\{\{\.CPUPerc\}\}\\t\{\{\.MemPerc\}\}$
+  - id: network-ls
+    match: ^docker network ls$
+  - id: network-inspect
+    match: ^docker network inspect [a-zA-Z0-9_.-]+$
+  - id: image-ls
+    match: ^docker image ls$
+  - id: volume-ls
+    match: ^docker volume ls$
+  - id: system-df
+    match: ^docker system df$
+  - id: version
+    match: ^docker version$
+  - id: info
+    match: ^docker info$
+  - id: compose-ps
+    match: ^docker compose -f /[a-zA-Z0-9_./-]+ ps$

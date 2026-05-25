@@ -1,0 +1,32 @@
+role: proxmox-readonly
+mutating: false
+targets: ["pve*", "proxmox*"]
+commands:
+  - id: pvesh-get-nodes
+    match: ^pvesh get /nodes$
+  - id: pvesh-get-cluster-resources
+    match: ^pvesh get /cluster/resources$
+  - id: pvesh-get-cluster-status
+    match: ^pvesh get /cluster/status$
+  - id: pvesh-get-node-status
+    match: ^pvesh get /nodes/[a-zA-Z0-9_-]+/status$
+  - id: pvesh-get-node-qemu
+    match: ^pvesh get /nodes/[a-zA-Z0-9_-]+/qemu$
+  - id: pvesh-get-vm-status
+    match: ^pvesh get /nodes/[a-zA-Z0-9_-]+/qemu/[0-9]+/status/current$
+  - id: pvesh-get-node-lxc
+    match: ^pvesh get /nodes/[a-zA-Z0-9_-]+/lxc$
+  - id: pvesh-get-storage
+    match: ^pvesh get /nodes/[a-zA-Z0-9_-]+/storage$
+  - id: pvecm-status
+    match: ^pvecm status$
+  - id: qm-list
+    match: ^qm list$
+  - id: qm-config
+    match: ^qm config [0-9]+$
+  - id: pct-list
+    match: ^pct list$
+  - id: pveversion
+    match: ^pveversion$
+  - id: cat-tasks-index
+    match: ^tail -n (50|100|200) /var/log/pve/tasks/index$

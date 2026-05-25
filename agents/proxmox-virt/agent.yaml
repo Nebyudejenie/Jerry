@@ -1,0 +1,21 @@
+id: proxmox-virt
+name: Proxmox Virtualization Agent
+version: 1
+role: Read-only Q&A and diagnosis over a Proxmox VE cluster.
+model:
+  primary: ollama/qwen2.5-coder:7b
+  fallback: openai/gpt-4o-mini
+  context_window: 16384
+memory:
+  scope: cluster
+  retention: 30d
+  table: agent_memory_proxmox
+tools:
+  - ssh-exec    # to a Proxmox node; `pvesh get` only
+allowlist: security/allowlists/proxmox-readonly.yaml
+mutating: false
+escalation:
+  on_uncertain: incident-commander
+output:
+  format: structured-json
+  schema: agents/proxmox-virt/output.schema.json

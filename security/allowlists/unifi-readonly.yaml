@@ -1,0 +1,23 @@
+role: unifi-readonly
+mutating: false
+# UniFi agent uses an HTTP gateway (not SSH); this file is consumed by the
+# unifi-api node to filter the path component of every request.
+api:
+  base_url_template: https://{UNIFI_HOST}/proxy/network/integration/v1
+  fallback_url_template: https://{UNIFI_HOST}/proxy/network/api/s/{site}
+  method: GET
+  forbidden_methods: [POST, PUT, PATCH, DELETE]
+allowed_paths:
+  - ^/sites$
+  - ^/sites/[a-zA-Z0-9_-]+/devices$
+  - ^/sites/[a-zA-Z0-9_-]+/devices/[a-zA-Z0-9_-]+$
+  - ^/sites/[a-zA-Z0-9_-]+/clients/active$
+  - ^/sites/[a-zA-Z0-9_-]+/clients/history$
+  - ^/sites/[a-zA-Z0-9_-]+/dpi$
+  - ^/sites/[a-zA-Z0-9_-]+/health$
+# legacy fallback paths:
+allowed_legacy_paths:
+  - ^/stat/health$
+  - ^/stat/device$
+  - ^/stat/sta$
+  - ^/stat/sysinfo$

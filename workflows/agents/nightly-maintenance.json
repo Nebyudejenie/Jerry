@@ -1,0 +1,46 @@
+{
+  "name": "Terry · Nightly Maintenance (02:30)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": { "interval": [ { "field": "cronExpression", "expression": "30 2 * * *" } ] }
+      },
+      "id": "schedule",
+      "name": "Nightly 02:30",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [200, 320]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT ops.nightly_maintenance() AS result"
+      },
+      "id": "run",
+      "name": "Run ops.nightly_maintenance()",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [400, 320]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.TOOLBOX_URL }}/audit/append",
+        "method": "POST",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ actor: 'cron:nightly-maintenance', action: 'maintenance', target: 'db', evidence: $json.result }) }}"
+      },
+      "id": "audit",
+      "name": "Audit row",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [600, 320]
+    }
+  ],
+  "connections": {
+    "Nightly 02:30":              { "main": [[{ "node": "Run ops.nightly_maintenance()", "type": "main", "index": 0 }]] },
+    "Run ops.nightly_maintenance()": { "main": [[{ "node": "Audit row", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "tags": [{ "name": "terry" }, { "name": "cron" }, { "name": "maintenance" }]
+}

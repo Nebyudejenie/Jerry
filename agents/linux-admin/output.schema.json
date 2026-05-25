@@ -1,0 +1,38 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "linux-admin-output",
+  "type": "object",
+  "required": ["summary", "evidence", "root_cause_hypothesis", "confidence", "needs_approval", "escalate"],
+  "additionalProperties": false,
+  "properties": {
+    "summary":     { "type": "string", "maxLength": 280 },
+    "evidence":    {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["command", "stdout_snippet"],
+        "additionalProperties": false,
+        "properties": {
+          "command":        { "type": "string" },
+          "stdout_snippet": { "type": "string", "maxLength": 2000 }
+        }
+      },
+      "minItems": 1
+    },
+    "root_cause_hypothesis": { "type": "string" },
+    "confidence":  { "type": "number", "minimum": 0, "maximum": 1 },
+    "proposed_remediation": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "properties": {
+        "command":       { "type": "string" },
+        "rationale":     { "type": "string" },
+        "blast_radius":  { "enum": ["low", "medium", "high"] },
+        "rollback":      { "type": "string" }
+      },
+      "required": ["command", "rationale", "blast_radius", "rollback"]
+    },
+    "needs_approval": { "type": "boolean" },
+    "escalate":       { "type": "boolean" }
+  }
+}

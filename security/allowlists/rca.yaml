@@ -1,0 +1,5 @@
+role: rca
+mutating: false
+# RCA has no shell tools (RAG + DB read only). No-op file.
+targets: []
+commands: []

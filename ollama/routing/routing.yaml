@@ -1,0 +1,33 @@
+# Model routing per VRAM tier. Set VRAM_TIER env var in compose.
+tiers:
+  homelab:        # ≤24 GB, often CPU-only
+    classification: [qwen2.5-coder:7b]
+    investigation:  [qwen2.5-coder:7b]
+    rca:            [qwen2.5-coder:7b]
+    commander:      [llama3.1:8b, qwen2.5-coder:7b]
+    embedding:      [nomic-embed-text]
+  startup:        # 24–48 GB GPU
+    classification: [qwen2.5-coder:7b]
+    investigation:  [qwen2.5-coder:7b]
+    rca:            [deepseek-coder-v2:16b, qwen2.5-coder:7b]
+    commander:      [llama3.1:8b]
+    embedding:      [nomic-embed-text]
+  enterprise:     # multi-GPU / H100
+    classification: [qwen2.5-coder:7b]
+    investigation:  [qwen2.5-coder:7b]
+    rca:            [deepseek-coder-v2:16b]
+    commander:      [llama3.1:70b, llama3.1:8b]
+    embedding:      [nomic-embed-text]
+
+options:
+  temperature_by_class:
+    classification: 0.0
+    investigation:  0.1
+    rca:            0.2
+    commander:      0.1
+    embedding:      0.0
+  num_ctx_by_class:
+    classification:  8192
+    investigation: 16384
+    rca:           32768
+    commander:     32768

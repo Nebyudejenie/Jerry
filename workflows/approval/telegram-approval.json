@@ -1,0 +1,115 @@
+{
+  "name": "Terry · Approval Gate (Telegram)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "terry/approval",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "hook",
+      "name": "Approval request webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [200, 320]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO ops.approvals (incident_id, command, target, requested_by) VALUES ($1, $2, $3, $4) RETURNING approval_id",
+        "options": { "queryReplacement": "={{ $json.incident_id }},={{ $json.command }},={{ $json.target }},={{ $json.requested_by }}" }
+      },
+      "id": "insert-approval",
+      "name": "Insert approval row",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [400, 320]
+    },
+    {
+      "parameters": {
+        "operation": "sendAndWait",
+        "chatId": "={{ $env.TELEGRAM_CHAT_ID }}",
+        "message": "=🔐 *Approval requested*\n\n*Incident*: `{{ $('Approval request webhook').first().json.incident_id }}`\n*Target*: `{{ $('Approval request webhook').first().json.target }}`\n*Command*:\n```\n{{ $('Approval request webhook').first().json.command }}\n```\n*Approval ID*: `{{ $json.approval_id }}`\n\nReply by clicking *Approve* or *Reject*. Expires in 5 minutes.",
+        "responseType": "approval",
+        "options": {
+          "approvalOptions": {
+            "values": { "approvalType": "double", "approveLabel": "Approve", "disapproveLabel": "Reject" }
+          },
+          "messageTracking": true
+        }
+      },
+      "id": "send-wait",
+      "name": "Send & wait",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [600, 320]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            { "id": "c1", "leftValue": "={{ $json.data.approved }}", "rightValue": true, "operator": { "type": "boolean", "operation": "true" } }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "approved-if",
+      "name": "Approved?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [820, 320]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE ops.approvals SET state='granted', granted_by=$1, granted_at=now() WHERE approval_id=$2 RETURNING *",
+        "options": { "queryReplacement": "={{ 'telegram:' + $json.data.from.id }},={{ $('Insert approval row').first().json.approval_id }}" }
+      },
+      "id": "mark-granted",
+      "name": "Mark granted",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [1040, 200]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE ops.approvals SET state='rejected' WHERE approval_id=$1 RETURNING *",
+        "options": { "queryReplacement": "={{ $('Insert approval row').first().json.approval_id }}" }
+      },
+      "id": "mark-rejected",
+      "name": "Mark rejected",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [1040, 440]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.N8N_INTERNAL_URL }}/webhook/terry/remediation/dispatch",
+        "method": "POST",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"approval_id\": \"{{ $('Insert approval row').first().json.approval_id }}\",\n  \"incident_id\": \"{{ $('Approval request webhook').first().json.incident_id }}\",\n  \"command\": {{ JSON.stringify($('Approval request webhook').first().json.command) }},\n  \"target\": \"{{ $('Approval request webhook').first().json.target }}\"\n}"
+      },
+      "id": "dispatch",
+      "name": "Dispatch to remediation",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1260, 200]
+    }
+  ],
+  "connections": {
+    "Approval request webhook": { "main": [[{ "node": "Insert approval row", "type": "main", "index": 0 }]] },
+    "Insert approval row":      { "main": [[{ "node": "Send & wait",        "type": "main", "index": 0 }]] },
+    "Send & wait":              { "main": [[{ "node": "Approved?",          "type": "main", "index": 0 }]] },
+    "Approved?":                { "main": [
+      [{ "node": "Mark granted",  "type": "main", "index": 0 }],
+      [{ "node": "Mark rejected", "type": "main", "index": 0 }]
+    ]},
+    "Mark granted":             { "main": [[{ "node": "Dispatch to remediation", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "tags": [{ "name": "terry" }, { "name": "approval" }]
+}

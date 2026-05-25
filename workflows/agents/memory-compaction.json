@@ -1,0 +1,85 @@
+{
+  "name": "Terry · Memory Compaction (nightly 02:00)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            { "field": "cronExpression", "expression": "0 2 * * *" }
+          ]
+        }
+      },
+      "id": "schedule",
+      "name": "Nightly 02:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [200, 320]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.TOOLBOX_URL }}/memory/compact",
+        "method": "POST",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={}",
+        "options": { "timeout": 600000, "response": { "response": { "neverError": true } } }
+      },
+      "id": "compact",
+      "name": "Run compactor",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [400, 320]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            { "id": "c1", "leftValue": "={{ $json.ok }}", "rightValue": true, "operator": { "type": "boolean", "operation": "false" } }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "failed-if",
+      "name": "Failed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [600, 320]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $env.TELEGRAM_CHAT_ID }}",
+        "text": "=🧠 *Memory compaction failed*\n\nExit: `{{ $json.exit_code }}`\nstdout (tail):\n```\n{{ ($json.stdout || '').slice(-1000) }}\n```"
+      },
+      "id": "tg-alert",
+      "name": "TG: failure alert",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [820, 200]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.TOOLBOX_URL }}/audit/append",
+        "method": "POST",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ actor: 'cron:memory-compaction', action: 'maintenance', target: 'memory', command: 'memory_compactor.py', exit_code: $json.exit_code, evidence: { stdout_snippet: ($json.stdout || '').slice(0, 1000) } }) }}"
+      },
+      "id": "audit",
+      "name": "Audit row",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [820, 440]
+    }
+  ],
+  "connections": {
+    "Nightly 02:00":  { "main": [[{ "node": "Run compactor", "type": "main", "index": 0 }]] },
+    "Run compactor":  { "main": [[{ "node": "Failed?", "type": "main", "index": 0 }]] },
+    "Failed?":        { "main": [
+      [{ "node": "TG: failure alert", "type": "main", "index": 0 }],
+      [{ "node": "Audit row", "type": "main", "index": 0 }]
+    ]}
+  },
+  "settings": { "executionOrder": "v1" },
+  "tags": [{ "name": "terry" }, { "name": "cron" }, { "name": "memory" }]
+}

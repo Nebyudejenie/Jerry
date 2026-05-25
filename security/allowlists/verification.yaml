@@ -1,0 +1,16 @@
+role: verification
+mutating: false
+targets: ["*"]
+commands:
+  - id: curl-localhost
+    match: ^curl -s -o /dev/null -w '%\{http_code\}' http://localhost:[0-9]{2,5}/$
+  - id: curl-host
+    match: ^curl -s -o /dev/null -w '%\{http_code\}' https?://[a-zA-Z0-9_.-]+(:[0-9]{2,5})?/[a-zA-Z0-9_/.-]*$
+  - id: docker-ps-name
+    match: ^docker ps --filter name=[a-zA-Z0-9_.-]+ --format \{\{\.Status\}\}$
+  - id: systemctl-is-active
+    match: ^systemctl is-active [a-zA-Z0-9_.@-]+$
+  - id: ss-listen-port
+    match: ^ss -tlnp sport = :[0-9]{2,5}$
+  - id: ping-host
+    match: ^ping -c 4 [a-zA-Z0-9_.-]+$

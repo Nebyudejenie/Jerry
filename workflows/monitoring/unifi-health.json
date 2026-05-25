@@ -1,0 +1,149 @@
+{
+  "name": "Terry · UniFi Health (every 10m)",
+  "nodes": [
+    {
+      "parameters": { "rule": { "interval": [{ "field": "minutes", "minutesInterval": 10 }] } },
+      "id": "schedule",
+      "name": "Every 10 minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [200, 320]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "p1", "name": "chatId", "type": "string", "value": "terry-unifi-health" },
+            { "id": "p2", "name": "agent_id", "type": "string", "value": "network-engineer" },
+            { "id": "p3", "name": "prompt", "type": "string", "value": "Report wifi network health: APs online vs offline, total active wired+wireless clients, top 3 bandwidth talkers, and any device with uplink down. If any AP is offline >10m, escalate." }
+          ]
+        },
+        "options": {}
+      },
+      "id": "setvars",
+      "name": "Set vars",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [400, 320]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT system_prompt AS system FROM ops.agent_definitions WHERE agent_id = $1",
+        "options": { "queryReplacement": "={{ $json.agent_id }}" }
+      },
+      "id": "load-prompt",
+      "name": "Load system prompt",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [600, 320]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $('Set vars').first().json.prompt }}",
+        "hasOutputParser": true,
+        "options": { "systemMessage": "={{ $json.system }}", "maxIterations": 8 }
+      },
+      "id": "agent",
+      "name": "Network agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [820, 320]
+    },
+    {
+      "parameters": { "model": "llama3.1:8b", "options": { "temperature": 0.1 } },
+      "id": "ollama",
+      "name": "Ollama Chat",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOllama",
+      "typeVersion": 1,
+      "position": [720, 540]
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $('Set vars').first().json.chatId }}",
+        "tableName": "ops.agent_memory"
+      },
+      "id": "memory",
+      "name": "Postgres memory",
+      "type": "@n8n/n8n-nodes-langchain.memoryPostgresChat",
+      "typeVersion": 1,
+      "position": [840, 540]
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "{\n  \"summary\": \"string\",\n  \"metrics\": {\"clients_wired\": 0, \"clients_wireless\": 0, \"top_talker_mbps\": 0},\n  \"anomalies\": [\"...\"],\n  \"evidence_endpoints\": [\"/sites/default/devices\"],\n  \"needs_approval\": false\n}"
+      },
+      "id": "parser",
+      "name": "Structured output",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.2,
+      "position": [960, 540]
+    },
+    {
+      "parameters": {
+        "toolDescription": "GET against the UniFi integration API. URL path must match unifi-readonly allowlist.",
+        "method": "GET",
+        "url": "=https://{{ $env.UNIFI_HOST }}/proxy/network/integration/v1{{ $fromAI('path', 'API path starting with /', 'string') }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "X-API-KEY", "value": "={{ $env.UNIFI_API_KEY }}" },
+            { "name": "Accept",    "value": "application/json" }
+          ]
+        },
+        "options": { "allowUnauthorizedCerts": true, "response": { "response": { "neverError": true } } }
+      },
+      "id": "unifi-tool",
+      "name": "unifi-api tool",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [1080, 540]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            { "id": "c1", "leftValue": "={{ $json.output.anomalies.length }}", "rightValue": 0, "operator": { "type": "number", "operation": "gt" } }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "anomaly-if",
+      "name": "Anomalies?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [1100, 320]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $env.TELEGRAM_CHAT_ID }}",
+        "text": "=🛜 *UniFi anomalies detected*\n\n{{ $json.output.summary }}\n\nAnomalies:\n{{ $json.output.anomalies.map(a => '• ' + a).join('\\n') }}",
+        "additionalFields": { "parse_mode": "Markdown" }
+      },
+      "id": "tg-alert",
+      "name": "TG: alert",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1320, 220]
+    }
+  ],
+  "connections": {
+    "Every 10 minutes":  { "main": [[{ "node": "Set vars", "type": "main", "index": 0 }]] },
+    "Set vars":          { "main": [[{ "node": "Load system prompt", "type": "main", "index": 0 }]] },
+    "Load system prompt":{ "main": [[{ "node": "Network agent", "type": "main", "index": 0 }]] },
+    "Ollama Chat":       { "ai_languageModel": [[{ "node": "Network agent", "type": "ai_languageModel", "index": 0 }]] },
+    "Postgres memory":   { "ai_memory":        [[{ "node": "Network agent", "type": "ai_memory",        "index": 0 }]] },
+    "Structured output": { "ai_outputParser":  [[{ "node": "Network agent", "type": "ai_outputParser",  "index": 0 }]] },
+    "unifi-api tool":    { "ai_tool":          [[{ "node": "Network agent", "type": "ai_tool",          "index": 0 }]] },
+    "Network agent":     { "main": [[{ "node": "Anomalies?", "type": "main", "index": 0 }]] },
+    "Anomalies?":        { "main": [
+      [{ "node": "TG: alert", "type": "main", "index": 0 }],
+      []
+    ]}
+  },
+  "settings": { "executionOrder": "v1" },
+  "tags": [{ "name": "terry" }, { "name": "monitoring" }, { "name": "unifi" }]
+}

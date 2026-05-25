@@ -1,0 +1,113 @@
+{
+  "name": "Terry · Incident Commander",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "terry/commander",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "hook",
+      "name": "Commander webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [200, 320]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO ops.incidents(title, severity, state, target_id) VALUES ($1, $2, 'open', $3) ON CONFLICT DO NOTHING RETURNING incident_id",
+        "options": { "queryReplacement": "={{ $json.title || 'Auto: ' + $json.target_id }},={{ $json.severity || 'warn' }},={{ $json.target_id }}" }
+      },
+      "id": "open-incident",
+      "name": "Open incident",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [420, 320]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Triage signal:\n```\n{{ JSON.stringify($('Commander webhook').first().json) }}\n```\n\nDecide which specialists to dispatch and what each should investigate.",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "={{ $('Load commander prompt').first().json.system }}",
+          "maxIterations": 4
+        }
+      },
+      "id": "commander-agent",
+      "name": "Commander agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [820, 320]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT system_prompt AS system FROM ops.agent_definitions WHERE agent_id = 'incident-commander'"
+      },
+      "id": "load-commander-prompt",
+      "name": "Load commander prompt",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [620, 320]
+    },
+    {
+      "parameters": { "model": "llama3.1:8b", "options": { "temperature": 0.1 } },
+      "id": "ollama",
+      "name": "Ollama Chat",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOllama",
+      "typeVersion": 1,
+      "position": [720, 540]
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "{\n  \"dispatch\": [{\"agent\": \"docker-expert\", \"input\": {\"target\": \"host1\", \"focus\": \"website container\"}}],\n  \"summary_for_human\": \"string\"\n}"
+      },
+      "id": "parser",
+      "name": "Structured output",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.2,
+      "position": [840, 540]
+    },
+    {
+      "parameters": {
+        "mode": "each",
+        "batchSize": 1,
+        "options": {}
+      },
+      "id": "fanout",
+      "name": "Fanout dispatch",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [1080, 320]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.N8N_INTERNAL_URL }}/webhook/terry/agent/{{ $json.agent }}",
+        "method": "POST",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ incident_id: $('Open incident').first().json.incident_id, ...$json.input }) }}"
+      },
+      "id": "dispatch",
+      "name": "Dispatch agent",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1280, 320]
+    }
+  ],
+  "connections": {
+    "Commander webhook":      { "main": [[{ "node": "Open incident", "type": "main", "index": 0 }]] },
+    "Open incident":          { "main": [[{ "node": "Load commander prompt", "type": "main", "index": 0 }]] },
+    "Load commander prompt":  { "main": [[{ "node": "Commander agent", "type": "main", "index": 0 }]] },
+    "Ollama Chat":            { "ai_languageModel": [[{ "node": "Commander agent", "type": "ai_languageModel", "index": 0 }]] },
+    "Structured output":      { "ai_outputParser":  [[{ "node": "Commander agent", "type": "ai_outputParser",  "index": 0 }]] },
+    "Commander agent":        { "main": [[{ "node": "Fanout dispatch", "type": "main", "index": 0 }]] },
+    "Fanout dispatch":        { "main": [[{ "node": "Dispatch agent", "type": "main", "index": 0 }]] },
+    "Dispatch agent":         { "main": [[{ "node": "Fanout dispatch", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "tags": [{ "name": "terry" }, { "name": "commander" }]
+}

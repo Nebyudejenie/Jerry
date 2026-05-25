@@ -1,0 +1,24 @@
+id: monitoring
+name: Monitoring Agent
+version: 1
+role: Continuous health probing across all registered targets; emits status events.
+model:
+  primary: ollama/qwen2.5-coder:7b
+  fallback: openai/gpt-4o-mini
+  context_window: 8192
+memory:
+  scope: rolling
+  retention: 24h
+  table: agent_memory_monitoring
+tools:
+  - http-probe
+  - metrics-read         # Prometheus query
+  - status-table-write   # write to monitoring.status
+allowlist: security/allowlists/monitoring.yaml
+mutating: false
+escalation:
+  on_failure: incident-commander
+  on_persistent_failure_minutes: 5
+output:
+  format: structured-json
+  schema: agents/monitoring/output.schema.json

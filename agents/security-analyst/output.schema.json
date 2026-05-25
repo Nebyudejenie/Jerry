@@ -1,0 +1,28 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "security-analyst-output",
+  "type": "object",
+  "required": ["findings", "swept_at"],
+  "additionalProperties": false,
+  "properties": {
+    "swept_at": { "type": "string", "format": "date-time" },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "title", "severity", "evidence", "host", "indicator", "recommended_action", "escalated"],
+        "additionalProperties": false,
+        "properties": {
+          "id":                 { "type": "string" },
+          "title":              { "type": "string", "maxLength": 200 },
+          "severity":           { "enum": ["info", "low", "medium", "high", "critical"] },
+          "evidence":           { "type": "string", "maxLength": 4000 },
+          "host":               { "type": "string" },
+          "indicator":          { "type": "string" },
+          "recommended_action": { "type": "string" },
+          "escalated":          { "type": "boolean" }
+        }
+      }
+    }
+  }
+}

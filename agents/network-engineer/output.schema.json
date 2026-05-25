@@ -1,0 +1,22 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "network-engineer-output",
+  "type": "object",
+  "required": ["summary", "metrics", "anomalies", "evidence_endpoints", "needs_approval"],
+  "additionalProperties": false,
+  "properties": {
+    "summary": { "type": "string", "maxLength": 600 },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "clients_wired":    { "type": "integer", "minimum": 0 },
+        "clients_wireless": { "type": "integer", "minimum": 0 },
+        "top_talker_mbps":  { "type": "number", "minimum": 0 }
+      }
+    },
+    "anomalies":          { "type": "array", "items": { "type": "string" } },
+    "evidence_endpoints": { "type": "array", "items": { "type": "string" } },
+    "needs_approval":     { "type": "boolean" }
+  }
+}

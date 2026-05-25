@@ -1,0 +1,156 @@
+{
+  "name": "Terry · Docker Recovery (mutating, gated)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "terry/remediation/dispatch",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "hook",
+      "name": "Dispatch webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [200, 320]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT frozen FROM ops.system_freeze WHERE id=1"
+      },
+      "id": "freeze-check",
+      "name": "Freeze check",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [400, 320]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            { "id": "c1", "leftValue": "={{ $json.frozen }}", "rightValue": false, "operator": { "type": "boolean", "operation": "false" } }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "not-frozen",
+      "name": "Not frozen?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [600, 320]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.TOOLBOX_URL }}/ssh/exec",
+        "method": "POST",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ role: 'remediation', target: $('Dispatch webhook').first().json.target, argv: $('Dispatch webhook').first().json.command.split(' '), approval_id: $('Dispatch webhook').first().json.approval_id, incident_id: $('Dispatch webhook').first().json.incident_id, dry_run: true }) }}",
+        "options": { "timeout": 70000, "response": { "response": { "neverError": true } } }
+      },
+      "id": "dry-run",
+      "name": "Dry-run preview",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [800, 240]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            { "id": "c1", "leftValue": "={{ $json.ok }}", "rightValue": true, "operator": { "type": "boolean", "operation": "true" } }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "dry-ok",
+      "name": "Dry-run ok?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [1000, 240]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.TOOLBOX_URL }}/ssh/exec",
+        "method": "POST",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ role: 'remediation', target: $('Dispatch webhook').first().json.target, argv: $('Dispatch webhook').first().json.command.split(' '), approval_id: $('Dispatch webhook').first().json.approval_id, incident_id: $('Dispatch webhook').first().json.incident_id, dry_run: false }) }}",
+        "options": { "timeout": 70000, "response": { "response": { "neverError": true } } }
+      },
+      "id": "execute",
+      "name": "Execute (gated)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1200, 200]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE ops.approvals SET state='consumed', consumed_at=now() WHERE approval_id=$1",
+        "options": { "queryReplacement": "={{ $('Dispatch webhook').first().json.approval_id }}" }
+      },
+      "id": "consume-approval",
+      "name": "Consume approval",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [1400, 200]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.N8N_INTERNAL_URL }}/webhook/terry/verify",
+        "method": "POST",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"incident_id\": \"{{ $('Dispatch webhook').first().json.incident_id }}\",\n  \"target\": \"{{ $('Dispatch webhook').first().json.target }}\"\n}"
+      },
+      "id": "trigger-verify",
+      "name": "Trigger verification",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1600, 200]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $env.TELEGRAM_CHAT_ID }}",
+        "text": "=🚫 *Remediation blocked* — system_freeze active.\nIncident: `{{ $('Dispatch webhook').first().json.incident_id }}`"
+      },
+      "id": "tg-frozen",
+      "name": "TG: frozen",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [800, 420]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $env.TELEGRAM_CHAT_ID }}",
+        "text": "=🚫 *Dry-run rejected* by SSH executor.\n\n{{ $json.rejected_reason }}"
+      },
+      "id": "tg-dry-fail",
+      "name": "TG: dry-run rejected",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1200, 360]
+    }
+  ],
+  "connections": {
+    "Dispatch webhook": { "main": [[{ "node": "Freeze check",     "type": "main", "index": 0 }]] },
+    "Freeze check":     { "main": [[{ "node": "Not frozen?",      "type": "main", "index": 0 }]] },
+    "Not frozen?":      { "main": [
+      [{ "node": "Dry-run preview", "type": "main", "index": 0 }],
+      [{ "node": "TG: frozen",      "type": "main", "index": 0 }]
+    ]},
+    "Dry-run preview":  { "main": [[{ "node": "Dry-run ok?",      "type": "main", "index": 0 }]] },
+    "Dry-run ok?":      { "main": [
+      [{ "node": "Execute (gated)",     "type": "main", "index": 0 }],
+      [{ "node": "TG: dry-run rejected","type": "main", "index": 0 }]
+    ]},
+    "Execute (gated)":  { "main": [[{ "node": "Consume approval", "type": "main", "index": 0 }]] },
+    "Consume approval": { "main": [[{ "node": "Trigger verification", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "tags": [{ "name": "terry" }, { "name": "remediation" }]
+}

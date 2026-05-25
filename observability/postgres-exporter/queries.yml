@@ -1,0 +1,48 @@
+# Custom queries for postgres-exporter, surfacing Terry-specific metrics
+# that don't have a dedicated exporter. Mounted into the container at
+# /etc/postgres-exporter/queries.yaml (see compose).
+# Docs: https://github.com/prometheus-community/postgres_exporter#adding-new-metrics-via-a-config-file
+
+terry_open_incidents:
+  query: "SELECT count(*)::float AS value FROM ops.incidents WHERE state <> 'closed'"
+  master: true
+  metrics:
+    - value:
+        usage: "GAUGE"
+        description: "Number of Terry incidents not in closed state"
+
+terry_pending_approvals:
+  query: "SELECT count(*)::float AS value FROM ops.approvals WHERE state = 'pending'"
+  master: true
+  metrics:
+    - value:
+        usage: "GAUGE"
+        description: "Number of Terry approvals awaiting human action"
+
+terry_audit_rows_total:
+  query: "SELECT count(*)::float AS value FROM audit.audit_log"
+  master: true
+  metrics:
+    - value:
+        usage: "COUNTER"
+        description: "Total rows in Terry's append-only audit ledger"
+
+terry_system_freeze:
+  query: "SELECT case when frozen then 1 else 0 end::float AS value FROM ops.system_freeze WHERE id = 1"
+  master: true
+  metrics:
+    - value:
+        usage: "GAUGE"
+        description: "1 if Terry's global remediation freeze is active, else 0"
+
+terry_targets_down:
+  query: |
+    SELECT count(DISTINCT target_id)::float AS value
+      FROM monitoring.status s1
+     WHERE s1.status = 'down'
+       AND s1.ts = (SELECT max(ts) FROM monitoring.status s2 WHERE s2.target_id = s1.target_id)
+  master: true
+  metrics:
+    - value:
+        usage: "GAUGE"
+        description: "Number of monitoring targets whose latest status is 'down'"

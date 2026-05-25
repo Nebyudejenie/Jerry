@@ -1,0 +1,28 @@
+role: nas-readonly
+mutating: false
+targets: ["nas*", "zima*", "truenas*", "synology*"]
+commands:
+  - id: lsblk
+    match: ^lsblk -f$
+  - id: df
+    match: ^df -hT$
+  - id: smartctl
+    match: ^smartctl -a /dev/(sd[a-z]|nvme[0-9]+n[0-9]+)$
+  - id: smartctl-health
+    match: ^smartctl -H /dev/(sd[a-z]|nvme[0-9]+n[0-9]+)$
+  - id: cat-mdstat
+    match: ^cat /proc/mdstat$
+  - id: zpool-status
+    match: ^zpool status -v$
+  - id: zpool-list
+    match: ^zpool list$
+  - id: iostat
+    match: ^iostat -xz 1 3$
+  - id: cat-net-dev
+    match: ^cat /proc/net/dev$
+  - id: journalctl-critical
+    match: ^journalctl -p 3 -xb --no-pager$
+  - id: uptime
+    match: ^uptime$
+  - id: free
+    match: ^free -h$

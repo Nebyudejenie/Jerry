@@ -1,0 +1,8 @@
+role: commander
+mutating: false
+# Incident Commander does NOT have SSH or HTTP-write tools. Its only "tools"
+# are workflow dispatches and DB writes to the incidents table. This file
+# exists as a no-op so the ssh_exec gateway will reject ANY shell call
+# attempted by a misconfigured Commander node.
+targets: []
+commands: []

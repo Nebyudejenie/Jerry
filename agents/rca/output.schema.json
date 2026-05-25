@@ -1,0 +1,43 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "rca-output",
+  "type": "object",
+  "required": ["incident_id", "title", "timeline", "five_whys", "root_cause", "blast_radius", "detective_control", "preventive_control", "similar_prior_incidents"],
+  "additionalProperties": false,
+  "properties": {
+    "incident_id": { "type": "string", "format": "uuid" },
+    "title":       { "type": "string", "maxLength": 200 },
+    "timeline": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["t", "event_id", "what"],
+        "additionalProperties": false,
+        "properties": {
+          "t":        { "type": "string", "format": "date-time" },
+          "event_id": { "type": "string", "format": "uuid" },
+          "what":     { "type": "string" }
+        }
+      }
+    },
+    "five_whys": {
+      "type": "array",
+      "maxItems": 5,
+      "items": {
+        "type": "object",
+        "required": ["why", "evidence_event_id"],
+        "additionalProperties": false,
+        "properties": {
+          "why":               { "type": "string" },
+          "evidence_event_id": { "type": "string", "format": "uuid" }
+        }
+      }
+    },
+    "root_cause":         { "type": "string" },
+    "blast_radius":       { "enum": ["low", "medium", "high"] },
+    "detective_control":  { "type": "string" },
+    "preventive_control": { "type": "string" },
+    "similar_prior_incidents": { "type": "array", "items": { "type": "string", "format": "uuid" } },
+    "runbook_suggestion":      { "type": ["string", "null"] }
+  }
+}

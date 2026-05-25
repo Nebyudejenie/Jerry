@@ -1,9 +1,453 @@
-# n8n AI Agent (Terry) - Complete Setup Guide
+# Terry AI Autonomous Infrastructure OS
 
-> **Video**: n8n Now Runs My ENTIRE Homelab
-> **Part 2**: Building Terry - Your AI IT Employee
+> **The full system described in the prompt below is implemented in this repo.**
+> Start with **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**, then **[runbooks/RUNBOOK.md](runbooks/RUNBOOK.md)** for deployment.
 
-This guide contains all the commands, prompts, and configurations shown in the video for setting up Terry, an intelligent AI agent that can monitor, troubleshoot, and fix issues in your homelab with human approval.
+## Quick links
+
+| Subsystem | Where |
+|---|---|
+| Architecture overview | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
+| Threat model | [security/policies/THREAT_MODEL.md](security/policies/THREAT_MODEL.md) |
+| 12 agent definitions | [agents/AGENTS.md](agents/AGENTS.md) |
+| Command allowlists | [security/allowlists/](security/allowlists/) |
+| SSH execution framework | [scripts/ssh-framework/](scripts/ssh-framework/) |
+| n8n workflow catalog | [workflows/README.md](workflows/README.md) |
+| Docker Compose stack | [docker-compose.yml](docker-compose.yml) |
+| Database schema | [memory/postgres-init/01_schema.sql](memory/postgres-init/01_schema.sql) |
+| Ollama model router | [ollama/routing/router.py](ollama/routing/router.py) |
+| Operations runbook | [runbooks/RUNBOOK.md](runbooks/RUNBOOK.md) |
+
+## Try it
+
+```bash
+make init           # creates .env, runs preflight
+$EDITOR .env        # fill secrets
+make up             # docker compose up -d + wait-healthy
+make bootstrap      # pull models, load agents, import workflows, seed Qdrant
+make healthcheck    # confirm everything is green
+```
+
+Then visit `https://<N8N_HOST>` for n8n and `https://<GRAFANA_HOST>` for the Terry overview dashboard.
+
+---
+
+## Original build prompt (for reference)
+
+The prompt below was the original brief that drove the design. The implementation above is the answer.
+
+---
+
+You are now acting as a world-class Principal Infrastructure Architect, Autonomous AI Systems Engineer, Senior SRE, Offensive Security Engineer, Distributed Systems Architect, and Multi-Agent Automation Specialist.
+
+Your mission is to DESIGN and BUILD a production-grade autonomous AI infrastructure system named:
+
+"TERRY AI AUTONOMOUS INFRASTRUCTURE OPERATING SYSTEM"
+
+This is NOT a demo project.
+This is NOT a beginner workflow.
+This MUST be designed like an enterprise-grade AI operations platform used by elite infrastructure teams.
+
+======================================================================
+CORE OBJECTIVES
+======================================================================
+
+The system must:
+
+1. Monitor infrastructure continuously
+2. Detect failures autonomously
+3. Investigate root causes intelligently
+4. Correlate multi-system events
+5. Generate remediation plans
+6. Request human approval when needed
+7. Execute safe remediations
+8. Verify recovery success
+9. Learn from previous incidents
+10. Maintain audit logs of all actions
+
+======================================================================
+SYSTEM ARCHITECTURE REQUIREMENTS
+======================================================================
+
+Design the system using modular distributed architecture.
+
+Include:
+
+- n8n orchestration engine
+- Multi-agent AI architecture
+- Ollama local LLM integration
+- Dockerized infrastructure
+- Proxmox integration
+- SSH execution framework
+- Telegram alerting
+- Structured logging
+- Metrics collection
+- Health monitoring
+- AI memory persistence
+- Incident tracking
+- Approval workflows
+- Role-based agent specialization
+- Security boundaries
+- Tool isolation
+- Retry mechanisms
+- Queue systems
+- Event-driven workflows
+- Self-healing automation
+
+======================================================================
+MULTI-AGENT DESIGN
+======================================================================
+
+Create multiple specialized AI agents.
+
+Required agents:
+
+1. Monitoring Agent
+2. Linux Administrator Agent
+3. Docker Expert Agent
+4. Network Engineer Agent
+5. Proxmox Virtualization Agent
+6. Storage/NAS Agent
+7. Security Analyst Agent
+8. Incident Commander Agent
+9. Root Cause Analysis Agent
+10. Remediation Agent
+11. Verification Agent
+12. Audit & Compliance Agent
+
+Each agent must have:
+
+- Role definition
+- Goals
+- Permissions
+- Memory scope
+- Tools available
+- Decision boundaries
+- Escalation logic
+- Communication protocol
+- Failure handling logic
+
+======================================================================
+AI THINKING MODEL
+======================================================================
+
+Force all agents to operate using:
+
+OBSERVE → ANALYZE → HYPOTHESIZE → VALIDATE → PLAN → REQUEST APPROVAL → EXECUTE → VERIFY → LOG → LEARN
+
+The agents MUST:
+- Think step-by-step
+- Avoid assumptions
+- Validate all hypotheses
+- Correlate evidence
+- Never hallucinate system states
+- Prefer read-only investigation first
+- Minimize destructive actions
+- Explain reasoning before execution
+
+======================================================================
+INFRASTRUCTURE REQUIREMENTS
+======================================================================
+
+Environment:
+
+- Ubuntu Server
+- Docker
+- Docker Compose
+- Proxmox Cluster
+- Multiple Linux VMs
+- Local Ollama models
+- SSH-controlled servers
+- Telegram integration
+- UniFi network stack
+- NAS storage
+- Optional Kubernetes support
+- Optional Qdrant vector database
+- Optional Redis queue system
+
+======================================================================
+OLLAMA + LOCAL AI REQUIREMENTS
+======================================================================
+
+Design for FULL LOCAL AI OPERATION.
+
+Primary LLM stack:
+- qwen2.5-coder
+- llama3
+- codellama
+- DeepSeek models
+- Hermes-compatible architecture
+
+Design:
+- model routing logic
+- context optimization
+- token reduction strategy
+- memory compression
+- retrieval augmentation
+- local embedding pipeline
+- offline-first architecture
+- agent-to-agent communication
+
+Explain:
+- which models should handle which tasks
+- RAM/VRAM optimization
+- CPU fallback mode
+- distributed inference options
+- performance tuning
+
+======================================================================
+N8N WORKFLOW REQUIREMENTS
+======================================================================
+
+Generate production-grade workflows for:
+
+1. Monitoring pipelines
+2. AI decision trees
+3. SSH execution systems
+4. Telegram approval loops
+5. Incident escalation
+6. Retry orchestration
+7. Queue processing
+8. Scheduled checks
+9. Multi-agent collaboration
+10. Auto-remediation
+11. Log analysis
+12. Threat detection
+13. Docker recovery
+14. VM recovery
+15. Network diagnostics
+16. AI memory updates
+
+For every workflow provide:
+
+- workflow name
+- architecture diagram
+- node-by-node explanation
+- failure scenarios
+- retry logic
+- security considerations
+- scaling recommendations
+
+======================================================================
+SECURITY REQUIREMENTS
+======================================================================
+
+Design using zero-trust principles.
+
+Include:
+- least privilege access
+- command allowlists
+- approval gating
+- sandbox execution
+- SSH hardening
+- encrypted secrets
+- vault integration
+- audit logging
+- intrusion detection
+- anomaly detection
+- agent permission segmentation
+- emergency kill-switch
+- rollback mechanisms
+
+The AI must NEVER:
+- run destructive commands automatically
+- expose secrets
+- disable security controls
+- trust user input blindly
+
+======================================================================
+SELF-HEALING LOGIC
+======================================================================
+
+The system must autonomously recover from:
+
+- stopped containers
+- crashed services
+- port conflicts
+- disk pressure
+- memory exhaustion
+- network outages
+- failed VM states
+- unhealthy containers
+- reverse proxy failures
+- DNS failures
+- SSL issues
+- storage degradation
+
+For every scenario provide:
+- detection logic
+- investigation workflow
+- remediation logic
+- rollback plan
+- verification checks
+
+======================================================================
+ADVANCED FEATURES
+======================================================================
+
+Design advanced enterprise features including:
+
+- swarm intelligence
+- AI incident war-room
+- shared memory systems
+- vector search knowledge base
+- infrastructure graph mapping
+- predictive failure analysis
+- anomaly detection
+- AI-generated RCA reports
+- natural language operations interface
+- autonomous change management
+- canary remediation
+- chaos engineering support
+- AI simulation mode
+- digital twin infrastructure
+- adaptive remediation policies
+
+======================================================================
+OUTPUT REQUIREMENTS
+======================================================================
+
+You MUST produce:
+
+1. Full enterprise architecture
+2. Infrastructure diagrams
+3. Folder structure
+4. Docker Compose stack
+5. n8n workflow architecture
+6. Ollama architecture
+7. AI agent definitions
+8. Security model
+9. Networking topology
+10. Incident response lifecycle
+11. Logging architecture
+12. Database design
+13. Memory architecture
+14. API design
+15. CLI command framework
+16. SSH execution framework
+17. Telegram integration flow
+18. Human approval system
+19. Production deployment strategy
+20. Scaling strategy
+21. Backup strategy
+22. Disaster recovery strategy
+23. CI/CD integration
+24. Observability stack
+25. Monitoring dashboards
+26. AI governance model
+27. Threat model
+28. Risk assessment
+29. High availability architecture
+30. Future roadmap
+
+======================================================================
+DEVELOPMENT MODE
+======================================================================
+
+Act like a senior systems architect leading a real engineering team.
+
+Do NOT give generic explanations.
+Do NOT simplify architecture.
+Do NOT omit production considerations.
+
+Provide:
+- real-world implementation patterns
+- production-ready examples
+- enterprise design standards
+- hardened configurations
+- scalable architecture
+- operational best practices
+
+======================================================================
+CODING REQUIREMENTS
+======================================================================
+
+Generate:
+- Docker Compose files
+- Bash scripts
+- Python automation scripts
+- n8n JSON workflows
+- SSH automation logic
+- monitoring scripts
+- Telegram bot integrations
+- Ollama API integrations
+- vector DB integrations
+- Redis queue logic
+- structured logging systems
+
+Code must be:
+- modular
+- secure
+- production-grade
+- scalable
+- observable
+- fault-tolerant
+
+======================================================================
+FINAL OBJECTIVE
+======================================================================
+
+The final result should resemble:
+
+A fully autonomous AI-powered infrastructure operations center capable of:
+- monitoring
+- diagnosing
+- repairing
+- learning
+- escalating
+- documenting
+- securing
+- optimizing
+
+with humans remaining in strategic control.
+
+Think like:
+Google SRE + OpenAI Infrastructure + DevSecOps + Autonomous AI Research Lab.
+
+Now begin by generating:
+
+1. Executive architecture overview
+2. System design
+3. Component interaction map
+4. Multi-agent topology
+5. Infrastructure stack
+6. Security architecture
+7. n8n workflow ecosystem
+8. Ollama deployment architecture
+9. Production deployment plan
+10. Phase-by-phase implementation roadmap
+
+Then continue deeper into every subsystem with exhaustive technical detail.
+
+Now challenge your own architecture like a principal SRE reviewer.
+
+Perform:
+- threat modeling
+- bottleneck analysis
+- scaling analysis
+- security audit
+- fault tolerance review
+- disaster recovery review
+- AI hallucination risk review
+- SSH abuse review
+- prompt injection defense review
+- infrastructure attack surface analysis
+
+Then redesign weak areas using enterprise-grade improvements.
+
+Finally produce:
+- optimized architecture v2
+- production hardening checklist
+- deployment readiness score
+- operational maturity assessment
+- estimated infrastructure requirements
+- RAM/CPU/storage sizing
+- recommended Ollama models by task
+- GPU recommendations
+- budget tiers:
+  - homelab
+  - startup
+  - enterprise
 
 ---
 
@@ -558,17 +1002,6 @@ In Part 3, we'll build:
 - [OpenAI API Documentation](https://platform.openai.com/docs/)
 - [Telegram Bot API](https://core.telegram.org/bots/api)
 - [Twingate Setup Guide](https://www.twingate.com/docs/)
-
+- [ollama setup guide]  https://docs.ollama.com/
+- [hermes Setup Guide] https://hermes-agent.nousresearch.com/
 ---
-
-## Support
-
-Questions? Issues? Join the discussion:
-- [NetworkChuck Discord](#)
-- [GitHub Issues](#)
-
----
-
-**Remember**: You're training an employee, not programming a bot. Give Terry context, teach him your processes, and build trust progressively.
-
-Happy automating! ☕️

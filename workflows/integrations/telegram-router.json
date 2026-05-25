@@ -1,0 +1,131 @@
+{
+  "name": "Terry · Telegram Command Router",
+  "nodes": [
+    {
+      "parameters": { "updates": ["message"], "additionalFields": {} },
+      "id": "tg-trigger",
+      "name": "Telegram trigger",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.2,
+      "position": [200, 320]
+    },
+    {
+      "parameters": {
+        "jsCode": "const approvers = ($env.TELEGRAM_APPROVERS || '').split(',').map(s => s.trim());\nconst from = $input.first().json.message?.from?.id?.toString() || '';\nif (!approvers.includes(from)) {\n  return [{ json: { allowed: false, from, text: '' } }];\n}\nconst text = $input.first().json.message?.text || '';\nreturn [{ json: { allowed: true, from, text } }];"
+      },
+      "id": "authz",
+      "name": "Authorize sender",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [420, 320]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            { "id": "c1", "leftValue": "={{ $json.allowed }}", "rightValue": true, "operator": { "type": "boolean", "operation": "true" } }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "allowed-if",
+      "name": "Allowed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [620, 320]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            { "outputKey": "freeze",    "conditions": { "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" }, "conditions": [ { "id": "r1", "leftValue": "={{ $json.text }}", "rightValue": "/freeze",    "operator": { "type": "string", "operation": "startsWith" } } ], "combinator": "and" } },
+            { "outputKey": "unfreeze",  "conditions": { "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" }, "conditions": [ { "id": "r2", "leftValue": "={{ $json.text }}", "rightValue": "/unfreeze",  "operator": { "type": "string", "operation": "startsWith" } } ], "combinator": "and" } },
+            { "outputKey": "status",    "conditions": { "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" }, "conditions": [ { "id": "r3", "leftValue": "={{ $json.text }}", "rightValue": "/status",    "operator": { "type": "string", "operation": "startsWith" } } ], "combinator": "and" } },
+            { "outputKey": "incidents", "conditions": { "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" }, "conditions": [ { "id": "r4", "leftValue": "={{ $json.text }}", "rightValue": "/incidents", "operator": { "type": "string", "operation": "startsWith" } } ], "combinator": "and" } }
+          ]
+        },
+        "options": {}
+      },
+      "id": "cmd-router",
+      "name": "Command router",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [820, 320]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE ops.system_freeze SET frozen=true, set_by=$1, set_at=now(), reason='telegram /freeze' WHERE id=1 RETURNING *",
+        "options": { "queryReplacement": "={{ 'telegram:' + $json.from }}" }
+      },
+      "id": "freeze",
+      "name": "Freeze",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [1040, 140]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE ops.system_freeze SET frozen=false, set_by=$1, set_at=now(), reason='telegram /unfreeze' WHERE id=1 RETURNING *",
+        "options": { "queryReplacement": "={{ 'telegram:' + $json.from }}" }
+      },
+      "id": "unfreeze",
+      "name": "Unfreeze",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [1040, 260]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT count(*) FILTER (WHERE state='open') AS open_incidents, (SELECT frozen FROM ops.system_freeze WHERE id=1) AS frozen FROM ops.incidents"
+      },
+      "id": "status-q",
+      "name": "Status query",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [1040, 380]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT incident_id, title, severity, state, opened_at FROM ops.incidents WHERE state <> 'closed' ORDER BY opened_at DESC LIMIT 10"
+      },
+      "id": "incidents-q",
+      "name": "Incidents query",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [1040, 500]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Telegram trigger').first().json.message.chat.id }}",
+        "text": "=Done. ✅"
+      },
+      "id": "ack",
+      "name": "Ack reply",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1260, 320]
+    }
+  ],
+  "connections": {
+    "Telegram trigger": { "main": [[{ "node": "Authorize sender", "type": "main", "index": 0 }]] },
+    "Authorize sender": { "main": [[{ "node": "Allowed?", "type": "main", "index": 0 }]] },
+    "Allowed?":         { "main": [[{ "node": "Command router", "type": "main", "index": 0 }]] },
+    "Command router":   { "main": [
+      [{ "node": "Freeze",   "type": "main", "index": 0 }],
+      [{ "node": "Unfreeze", "type": "main", "index": 0 }],
+      [{ "node": "Status query",   "type": "main", "index": 0 }],
+      [{ "node": "Incidents query","type": "main", "index": 0 }]
+    ]},
+    "Freeze":          { "main": [[{ "node": "Ack reply", "type": "main", "index": 0 }]] },
+    "Unfreeze":        { "main": [[{ "node": "Ack reply", "type": "main", "index": 0 }]] },
+    "Status query":    { "main": [[{ "node": "Ack reply", "type": "main", "index": 0 }]] },
+    "Incidents query": { "main": [[{ "node": "Ack reply", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "tags": [{ "name": "terry" }, { "name": "telegram" }]
+}

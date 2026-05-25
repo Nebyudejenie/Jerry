@@ -1,0 +1,23 @@
+id: security-analyst
+name: Security Analyst Agent
+version: 1
+role: Anomaly review, brute-force detection, suspicious binary review (read-only).
+model:
+  primary: ollama/llama3.1:8b
+  fallback: openai/gpt-4o-mini
+  context_window: 16384
+memory:
+  scope: incident
+  retention: persistent
+  table: agent_memory_security
+tools:
+  - ssh-exec
+  - loki-query   # Loki LogQL
+allowlist: security/allowlists/security-readonly.yaml
+mutating: false
+escalation:
+  on_high_severity: incident-commander
+  on_any_finding_severity_critical: incident-commander
+output:
+  format: structured-json
+  schema: agents/security-analyst/output.schema.json

@@ -1,0 +1,58 @@
+{
+  "name": "Terry · SSH Exec (sub-workflow)",
+  "nodes": [
+    {
+      "parameters": {
+        "events": ["workflow_call"],
+        "inputSource": "passthrough"
+      },
+      "id": "trigger",
+      "name": "When called by another workflow",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [200, 320]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Validate inputs the tool node passed in.\nconst i = $input.first().json;\nconst missing = ['role','target','argv'].filter(k => !(k in i));\nif (missing.length) return [{ json: { ok: false, rejected_reason: 'missing: ' + missing.join(',') } }];\nif (!Array.isArray(i.argv)) return [{ json: { ok: false, rejected_reason: 'argv must be array' } }];\nreturn [{ json: i }];"
+      },
+      "id": "validate",
+      "name": "Validate input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [400, 320]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.TOOLBOX_URL }}/ssh/exec",
+        "method": "POST",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": { "timeout": 70000, "response": { "response": { "neverError": true } } }
+      },
+      "id": "toolbox-call",
+      "name": "Toolbox /ssh/exec",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [600, 320]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Surface a slim, LLM-friendly version of the response.\nconst r = $input.first().json;\nreturn [{ json: {\n  ok: !!r.ok,\n  exit_code: r.exit_code ?? null,\n  rejected_reason: r.rejected_reason ?? null,\n  audit_id: r.audit_id ?? null,\n  duration_ms: r.duration_ms ?? null,\n  output: r.wrapped_for_llm || ('<tool_output trust=\"low\">' + (r.stdout || '') + '</tool_output>')\n} }];"
+      },
+      "id": "shape",
+      "name": "Shape for tool consumer",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [800, 320]
+    }
+  ],
+  "connections": {
+    "When called by another workflow": { "main": [[{ "node": "Validate input",     "type": "main", "index": 0 }]] },
+    "Validate input":                  { "main": [[{ "node": "Toolbox /ssh/exec", "type": "main", "index": 0 }]] },
+    "Toolbox /ssh/exec":               { "main": [[{ "node": "Shape for tool consumer", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "tags": [{ "name": "terry" }, { "name": "subworkflow" }]
+}

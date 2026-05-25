@@ -1,0 +1,139 @@
+{
+  "name": "Terry · RCA subworkflow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "terry/rca",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "hook",
+      "name": "RCA webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [200, 320]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT json_agg(json_build_object('event_id', event_id, 'ts', ts, 'actor', actor, 'kind', kind, 'payload', payload) ORDER BY ts) AS timeline FROM ops.incident_events WHERE incident_id = $1",
+        "options": { "queryReplacement": "={{ $json.incident_id }}" }
+      },
+      "id": "load-timeline",
+      "name": "Load timeline",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [400, 320]
+    },
+    {
+      "parameters": {
+        "url": "http://terry-router:8088/embed",
+        "method": "POST",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"text\": {{ JSON.stringify($('RCA webhook').first().json.title + ' ' + $('RCA webhook').first().json.symptoms) }}\n}"
+      },
+      "id": "embed-query",
+      "name": "Embed query",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [600, 320]
+    },
+    {
+      "parameters": {
+        "url": "=http://qdrant:6333/collections/terry-kb/points/search",
+        "method": "POST",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "api-key", "value": "={{ $env.QDRANT_API_KEY }}" }] },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"vector\": {{ JSON.stringify($json.embedding) }},\n  \"limit\": 5,\n  \"with_payload\": true,\n  \"score_threshold\": 0.6\n}"
+      },
+      "id": "qdrant-search",
+      "name": "Qdrant search",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [800, 320]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT system_prompt AS system FROM ops.agent_definitions WHERE agent_id = 'rca'"
+      },
+      "id": "load-prompt",
+      "name": "Load RCA prompt",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [1000, 320]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Incident: {{ $('RCA webhook').first().json.title }}\n\nTimeline:\n```json\n{{ JSON.stringify($('Load timeline').first().json.timeline, null, 2) }}\n```\n\nSimilar prior incidents (top-5):\n```json\n{{ JSON.stringify($('Qdrant search').first().json.result || [], null, 2) }}\n```\n\nProduce the structured RCA per schema.",
+        "hasOutputParser": true,
+        "options": { "systemMessage": "={{ $json.system }}", "maxIterations": 4 }
+      },
+      "id": "agent",
+      "name": "RCA agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [1220, 320]
+    },
+    {
+      "parameters": { "model": "qwen2.5-coder:7b", "options": { "temperature": 0.2, "num_ctx": 32768 } },
+      "id": "ollama",
+      "name": "Ollama Chat",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOllama",
+      "typeVersion": 1,
+      "position": [1120, 540]
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "{\n  \"incident_id\": \"uuid\",\n  \"title\": \"string\",\n  \"timeline\": [{\"t\": \"ISO\", \"event_id\": \"uuid\", \"what\": \"...\"}],\n  \"five_whys\": [{\"why\": \"...\", \"evidence_event_id\": \"uuid\"}],\n  \"root_cause\": \"string\",\n  \"blast_radius\": \"low\",\n  \"detective_control\": \"string\",\n  \"preventive_control\": \"string\",\n  \"similar_prior_incidents\": [],\n  \"runbook_suggestion\": null\n}"
+      },
+      "id": "parser",
+      "name": "Structured output",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.2,
+      "position": [1260, 540]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE ops.incidents SET rca = $1::jsonb WHERE incident_id = $2 RETURNING incident_id",
+        "options": { "queryReplacement": "={{ JSON.stringify($json.output) }},={{ $('RCA webhook').first().json.incident_id }}" }
+      },
+      "id": "save-rca",
+      "name": "Save RCA to incident",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [1440, 320]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($('RCA agent').first().json.output) }}",
+        "options": {}
+      },
+      "id": "respond",
+      "name": "Respond to caller",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1640, 320]
+    }
+  ],
+  "connections": {
+    "RCA webhook":     { "main": [[{ "node": "Load timeline", "type": "main", "index": 0 }]] },
+    "Load timeline":   { "main": [[{ "node": "Embed query", "type": "main", "index": 0 }]] },
+    "Embed query":     { "main": [[{ "node": "Qdrant search", "type": "main", "index": 0 }]] },
+    "Qdrant search":   { "main": [[{ "node": "Load RCA prompt", "type": "main", "index": 0 }]] },
+    "Load RCA prompt": { "main": [[{ "node": "RCA agent", "type": "main", "index": 0 }]] },
+    "Ollama Chat":       { "ai_languageModel": [[{ "node": "RCA agent", "type": "ai_languageModel", "index": 0 }]] },
+    "Structured output": { "ai_outputParser":  [[{ "node": "RCA agent", "type": "ai_outputParser",  "index": 0 }]] },
+    "RCA agent":         { "main": [[{ "node": "Save RCA to incident", "type": "main", "index": 0 }]] },
+    "Save RCA to incident": { "main": [[{ "node": "Respond to caller", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "tags": [{ "name": "terry" }, { "name": "rca" }]
+}

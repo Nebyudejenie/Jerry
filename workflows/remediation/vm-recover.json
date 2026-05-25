@@ -1,0 +1,150 @@
+{
+  "name": "Terry · VM Recovery (Proxmox, gated)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "terry/remediation/vm-recover",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "hook",
+      "name": "VM-recover webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [200, 320]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT frozen FROM ops.system_freeze WHERE id=1"
+      },
+      "id": "freeze-check",
+      "name": "Freeze check",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [400, 320]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            { "id": "c1", "leftValue": "={{ $json.frozen }}", "rightValue": false, "operator": { "type": "boolean", "operation": "false" } }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "not-frozen",
+      "name": "Not frozen?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [600, 320]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.TOOLBOX_URL }}/ssh/exec",
+        "method": "POST",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ role: 'proxmox-readonly', target: $('VM-recover webhook').first().json.node, argv: ['pvesh', 'get', '/nodes/' + $('VM-recover webhook').first().json.node + '/qemu/' + $('VM-recover webhook').first().json.vmid + '/status/current'], incident_id: $('VM-recover webhook').first().json.incident_id, dry_run: false }) }}",
+        "options": { "timeout": 70000, "response": { "response": { "neverError": true } } }
+      },
+      "id": "preflight",
+      "name": "Preflight: read VM state",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [800, 240]
+    },
+    {
+      "parameters": {
+        "jsCode": "const r = $input.first().json;\nlet status = 'unknown';\ntry {\n  const blob = JSON.parse(r.output ? r.output.replace(/<\\/?tool_output[^>]*>/g, '') : '');\n  status = (blob && blob.data && blob.data.status) || 'unknown';\n} catch (_) {}\nreturn [{ json: { ok: r.ok, status, raw: r } }];"
+      },
+      "id": "parse-state",
+      "name": "Parse state",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1000, 240]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            { "outputKey": "stopped", "conditions": { "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" }, "conditions": [ { "id": "r1", "leftValue": "={{ $json.status }}", "rightValue": "stopped", "operator": { "type": "string", "operation": "equals" } } ], "combinator": "and" } },
+            { "outputKey": "running", "conditions": { "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" }, "conditions": [ { "id": "r2", "leftValue": "={{ $json.status }}", "rightValue": "running", "operator": { "type": "string", "operation": "equals" } } ], "combinator": "and" } }
+          ]
+        },
+        "options": { "fallbackOutput": "extra" }
+      },
+      "id": "state-router",
+      "name": "State router",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [1200, 240]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.N8N_INTERNAL_URL }}/webhook/terry/approval",
+        "method": "POST",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"incident_id\": \"{{ $('VM-recover webhook').first().json.incident_id }}\",\n  \"command\": \"qm start {{ $('VM-recover webhook').first().json.vmid }}\",\n  \"target\": \"{{ $('VM-recover webhook').first().json.node }}\",\n  \"requested_by\": \"agent:vm-recover\"\n}"
+      },
+      "id": "req-approval",
+      "name": "Request approval (start VM)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1420, 140]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $env.TELEGRAM_CHAT_ID }}",
+        "text": "=ℹ️ VM {{ $('VM-recover webhook').first().json.vmid }} on {{ $('VM-recover webhook').first().json.node }} is already running. Nothing to do."
+      },
+      "id": "tg-noop",
+      "name": "TG: already running",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1420, 240]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $env.TELEGRAM_CHAT_ID }}",
+        "text": "=⚠️ VM {{ $('VM-recover webhook').first().json.vmid }} state is `{{ $json.status }}` — needs human investigation, not auto-start."
+      },
+      "id": "tg-unknown",
+      "name": "TG: unknown state",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1420, 360]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $env.TELEGRAM_CHAT_ID }}",
+        "text": "=🚫 *VM recovery blocked* — system_freeze active."
+      },
+      "id": "tg-frozen",
+      "name": "TG: frozen",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [800, 460]
+    }
+  ],
+  "connections": {
+    "VM-recover webhook": { "main": [[{ "node": "Freeze check", "type": "main", "index": 0 }]] },
+    "Freeze check":       { "main": [[{ "node": "Not frozen?",  "type": "main", "index": 0 }]] },
+    "Not frozen?":        { "main": [
+      [{ "node": "Preflight: read VM state", "type": "main", "index": 0 }],
+      [{ "node": "TG: frozen", "type": "main", "index": 0 }]
+    ]},
+    "Preflight: read VM state": { "main": [[{ "node": "Parse state", "type": "main", "index": 0 }]] },
+    "Parse state":              { "main": [[{ "node": "State router", "type": "main", "index": 0 }]] },
+    "State router": { "main": [
+      [{ "node": "Request approval (start VM)", "type": "main", "index": 0 }],
+      [{ "node": "TG: already running",        "type": "main", "index": 0 }],
+      [{ "node": "TG: unknown state",          "type": "main", "index": 0 }]
+    ]}
+  },
+  "settings": { "executionOrder": "v1" },
+  "tags": [{ "name": "terry" }, { "name": "remediation" }, { "name": "proxmox" }]
+}

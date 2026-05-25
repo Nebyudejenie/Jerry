@@ -1,0 +1,86 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  validate:
+    name: Validate + unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install test deps
+        run: pip install pytest pyyaml
+
+      - name: JSON syntax (all files)
+        run: |
+          python3 - <<'PY'
+          import json, pathlib, sys
+          bad = []
+          for p in pathlib.Path('.').rglob('*.json'):
+              if '.git' in p.parts: continue
+              try: json.loads(p.read_text())
+              except Exception as e: bad.append((str(p), str(e)))
+          if bad:
+              for f, e in bad: print(f"::error file={f}::{e}")
+              sys.exit(1)
+          PY
+
+      - name: YAML syntax (all files)
+        run: |
+          python3 - <<'PY'
+          import yaml, pathlib, sys
+          bad = []
+          for p in list(pathlib.Path('.').rglob('*.yaml')) + list(pathlib.Path('.').rglob('*.yml')):
+              if '.git' in p.parts: continue
+              try: yaml.safe_load(p.read_text())
+              except Exception as e: bad.append((str(p), str(e)))
+          if bad:
+              for f, e in bad: print(f"::error file={f}::{e}")
+              sys.exit(1)
+          PY
+
+      - name: Python syntax
+        run: python3 -m compileall -q .
+
+      - name: Bash syntax
+        run: |
+          for f in $(find . -name '*.sh' -not -path './.git/*'); do
+            bash -n "$f" || { echo "::error file=$f::bash syntax error"; exit 1; }
+          done
+
+      - name: Pytest unit suite
+        run: pytest -q
+
+      - name: Docker compose syntax
+        run: |
+          cp .env.example .env
+          docker compose config --quiet
+
+  lint-bash:
+    name: shellcheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ludeeus/action-shellcheck@master
+        with:
+          severity: error
+
+  security-allowlist-guard:
+    name: Remediation allowlist guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install pyyaml pytest
+      - run: pytest tests/unit/test_allowlists.py -v

@@ -1,0 +1,400 @@
+x-n8n-base: &n8n-base
+  image: n8nio/n8n:latest
+  restart: unless-stopped
+  env_file:
+    - .env
+    - path: .env.runtime
+      required: false
+  environment:
+    DB_TYPE: postgresdb
+    DB_POSTGRESDB_HOST: postgres
+    DB_POSTGRESDB_PORT: 5432
+    DB_POSTGRESDB_DATABASE: ${POSTGRES_DB:-terry}
+    DB_POSTGRESDB_USER: ${POSTGRES_USER:-terry}
+    DB_POSTGRESDB_PASSWORD: ${POSTGRES_PASSWORD}
+    EXECUTIONS_MODE: queue
+    QUEUE_BULL_REDIS_HOST: redis
+    QUEUE_BULL_REDIS_PORT: 6379
+    QUEUE_BULL_REDIS_PASSWORD: ${REDIS_PASSWORD}
+    N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY}
+    N8N_HOST: ${N8N_HOST:-localhost}
+    N8N_PROTOCOL: https
+    N8N_PROXY_HOPS: 1
+    WEBHOOK_URL: https://${N8N_HOST:-localhost}/
+    GENERIC_TIMEZONE: ${TZ:-UTC}
+    N8N_LOG_LEVEL: info
+    N8N_LOG_OUTPUT: console
+    N8N_DIAGNOSTICS_ENABLED: "false"
+    N8N_VERSION_NOTIFICATIONS_ENABLED: "false"
+    N8N_METRICS: "true"
+    N8N_METRICS_INCLUDE_DEFAULT_METRICS: "true"
+    N8N_METRICS_INCLUDE_NODE_TYPE_LABEL: "true"
+    NODE_FUNCTION_ALLOW_EXTERNAL: axios,crypto,jsonwebtoken
+    N8N_INTERNAL_URL: http://n8n:5678
+    TOOLBOX_URL: http://terry-toolbox:8090
+    ROUTER_URL: http://terry-router:8088
+  volumes:
+    - n8n_data:/home/node/.n8n
+    - ./workflows:/workflows:ro
+    - ./scripts/ssh-framework:/ssh-framework:ro
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+  networks:
+    - terry-net
+
+services:
+  # ────────────────────────────────────────────────────────────────
+  # EDGE
+  # ────────────────────────────────────────────────────────────────
+  traefik:
+    image: traefik:v3.2
+    container_name: traefik
+    restart: unless-stopped
+    command:
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --providers.docker.network=terry-net
+      - --entrypoints.web.address=:80
+      - --entrypoints.web.http.redirections.entrypoint.to=websecure
+      - --entrypoints.web.http.redirections.entrypoint.scheme=https
+      - --entrypoints.websecure.address=:443
+      - --certificatesresolvers.le.acme.email=${ACME_EMAIL}
+      - --certificatesresolvers.le.acme.storage=/letsencrypt/acme.json
+      - --certificatesresolvers.le.acme.tlschallenge=true
+      - --accesslog=true
+      - --metrics.prometheus=true
+      - --metrics.prometheus.entrypoint=metrics
+      - --entrypoints.metrics.address=:8082
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - traefik_letsencrypt:/letsencrypt
+    networks:
+      - terry-net
+
+  # ────────────────────────────────────────────────────────────────
+  # ORCHESTRATION (n8n queue mode: 1 main + N workers)
+  # ────────────────────────────────────────────────────────────────
+  n8n:
+    <<: *n8n-base
+    container_name: n8n
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.n8n.rule=Host(`${N8N_HOST}`)
+      - traefik.http.routers.n8n.entrypoints=websecure
+      - traefik.http.routers.n8n.tls.certresolver=le
+      - traefik.http.services.n8n.loadbalancer.server.port=5678
+
+  n8n-worker:
+    <<: *n8n-base
+    command: worker --concurrency=${N8N_WORKER_CONCURRENCY:-5}
+    deploy:
+      replicas: ${N8N_WORKER_REPLICAS:-2}
+
+  n8n-webhook:
+    <<: *n8n-base
+    command: webhook
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.n8nhook.rule=Host(`${N8N_HOST}`) && PathPrefix(`/webhook`)
+      - traefik.http.routers.n8nhook.entrypoints=websecure
+      - traefik.http.routers.n8nhook.tls.certresolver=le
+      - traefik.http.services.n8nhook.loadbalancer.server.port=5678
+
+  # ────────────────────────────────────────────────────────────────
+  # STATE
+  # ────────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-terry}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-terry}
+      POSTGRES_INITDB_ARGS: "--data-checksums"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./memory/postgres-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-terry}"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - terry-net
+
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    restart: unless-stopped
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD}", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - terry-net
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: qdrant
+    restart: unless-stopped
+    environment:
+      QDRANT__SERVICE__API_KEY: ${QDRANT_API_KEY}
+    volumes:
+      - qdrant_data:/qdrant/storage
+    networks:
+      - terry-net
+
+  # ────────────────────────────────────────────────────────────────
+  # LOCAL AI — Ollama
+  # ────────────────────────────────────────────────────────────────
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    restart: unless-stopped
+    environment:
+      OLLAMA_KEEP_ALIVE: 24h
+      OLLAMA_NUM_PARALLEL: ${OLLAMA_NUM_PARALLEL:-2}
+      OLLAMA_MAX_LOADED_MODELS: ${OLLAMA_MAX_LOADED_MODELS:-2}
+    volumes:
+      - ollama_data:/root/.ollama
+      - ./ollama/modelfiles:/modelfiles:ro
+    # Uncomment for GPU:
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+    networks:
+      - terry-net
+
+  ollama-bootstrap:
+    image: ollama/ollama:latest
+    depends_on:
+      - ollama
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        sleep 5
+        for m in ${OLLAMA_MODELS:-qwen2.5-coder:7b llama3.1:8b nomic-embed-text}; do
+          OLLAMA_HOST=ollama:11434 ollama pull "$$m" || true
+        done
+    restart: "no"
+    networks:
+      - terry-net
+
+  terry-router:
+    build:
+      context: ./ollama/routing
+    container_name: terry-router
+    restart: unless-stopped
+    environment:
+      OLLAMA_URL: http://ollama:11434
+      VRAM_TIER: ${VRAM_TIER:-homelab}
+      ROUTING_FILE: /app/routing.yaml
+      LISTEN_PORT: 8088
+    depends_on:
+      - ollama
+    networks:
+      - terry-net
+
+  # ────────────────────────────────────────────────────────────────
+  # PRIVILEGED TOOL SIDECAR — Python+psycopg+yaml+ssh, not in n8n image
+  # ────────────────────────────────────────────────────────────────
+  terry-toolbox:
+    build:
+      context: ./infra/toolbox
+    container_name: terry-toolbox
+    restart: unless-stopped
+    environment:
+      TERRY_ALLOWLIST_DIR: /app/allowlists
+      TERRY_AUDIT_DSN: postgresql://${POSTGRES_USER:-terry}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-terry}
+      TERRY_DSN:       postgresql://${POSTGRES_USER:-terry}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-terry}
+      TERRY_SSH_KEY:   /home/terry/.ssh/id_terry
+      TERRY_SSH_USER:  ${TERRY_SSH_USER:-terry}
+      TERRY_RUNTIME_DIR: /tmp/terry
+      ROUTER_URL:      http://terry-router:8088
+      QDRANT_URL:      http://qdrant:6333
+      QDRANT_API_KEY:  ${QDRANT_API_KEY}
+    volumes:
+      - ./scripts/ssh-framework/ssh_exec.py:/app/ssh_exec.py:ro
+      - ./scripts/utilities/audit_writer.py:/app/audit_writer.py:ro
+      - ./scripts/utilities/memory_compactor.py:/app/memory_compactor.py:ro
+      - ./security/allowlists:/app/allowlists:ro
+      - ./secrets/ssh:/home/terry/.ssh:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - terry-net
+
+  # ────────────────────────────────────────────────────────────────
+  # POSTGRES EXPORTER — fills the metrics scrape referenced earlier
+  # ────────────────────────────────────────────────────────────────
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:latest
+    container_name: postgres-exporter
+    restart: unless-stopped
+    command:
+      - --extend.query-path=/etc/postgres-exporter/queries.yaml
+    environment:
+      DATA_SOURCE_NAME: postgresql://${POSTGRES_USER:-terry}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-terry}?sslmode=disable
+    volumes:
+      - ./observability/postgres-exporter/queries.yml:/etc/postgres-exporter/queries.yaml:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - terry-net
+
+  # ────────────────────────────────────────────────────────────────
+  # SECRETS
+  # ────────────────────────────────────────────────────────────────
+  vault:
+    image: hashicorp/vault:latest
+    container_name: vault
+    restart: unless-stopped
+    cap_add: [IPC_LOCK]
+    environment:
+      VAULT_DEV_ROOT_TOKEN_ID: ${VAULT_ROOT_TOKEN}
+      VAULT_DEV_LISTEN_ADDRESS: 0.0.0.0:8200
+      VAULT_ADDR: http://0.0.0.0:8200
+    volumes:
+      - vault_data:/vault/file
+      - ./infra/vault:/vault/config:ro
+    networks:
+      - terry-net
+
+  # ────────────────────────────────────────────────────────────────
+  # OBSERVABILITY
+  # ────────────────────────────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=30d
+      - --web.enable-lifecycle
+    volumes:
+      - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./observability/prometheus/rules:/etc/prometheus/rules:ro
+      - prometheus_data:/prometheus
+    networks:
+      - terry-net
+
+  alertmanager:
+    image: prom/alertmanager:latest
+    container_name: alertmanager
+    restart: unless-stopped
+    volumes:
+      - ./observability/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager_data:/alertmanager
+    networks:
+      - terry-net
+
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: node-exporter
+    restart: unless-stopped
+    pid: host
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro,rslave
+    command:
+      - --path.procfs=/host/proc
+      - --path.sysfs=/host/sys
+      - --path.rootfs=/rootfs
+      - --collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc|rootfs)($$|/)
+    networks:
+      - terry-net
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:latest
+    container_name: cadvisor
+    restart: unless-stopped
+    privileged: true
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    networks:
+      - terry-net
+
+  loki:
+    image: grafana/loki:latest
+    container_name: loki
+    restart: unless-stopped
+    command: -config.file=/etc/loki/loki.yml
+    volumes:
+      - ./observability/loki/loki.yml:/etc/loki/loki.yml:ro
+      - loki_data:/loki
+    networks:
+      - terry-net
+
+  promtail:
+    image: grafana/promtail:latest
+    container_name: promtail
+    restart: unless-stopped
+    volumes:
+      - ./observability/loki/promtail.yml:/etc/promtail/promtail.yml:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/log:/var/log:ro
+    command: -config.file=/etc/promtail/promtail.yml
+    networks:
+      - terry-net
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.grafana.rule=Host(`${GRAFANA_HOST}`)
+      - traefik.http.routers.grafana.entrypoints=websecure
+      - traefik.http.routers.grafana.tls.certresolver=le
+      - traefik.http.services.grafana.loadbalancer.server.port=3000
+    networks:
+      - terry-net
+
+networks:
+  terry-net:
+    driver: bridge
+    name: terry-net
+
+volumes:
+  n8n_data:
+  postgres_data:
+  redis_data:
+  qdrant_data:
+  ollama_data:
+  vault_data:
+  prometheus_data:
+  alertmanager_data:
+  loki_data:
+  grafana_data:
+  traefik_letsencrypt:

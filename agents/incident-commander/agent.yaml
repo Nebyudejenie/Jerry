@@ -1,0 +1,24 @@
+id: incident-commander
+name: Incident Commander Agent
+version: 1
+role: Coordinates multi-agent investigations; opens / closes incidents; dispatches.
+model:
+  primary: ollama/llama3.1:70b      # falls back if VRAM insufficient
+  fallback: openai/gpt-4o
+  context_window: 32768
+memory:
+  scope: incident
+  retention: persistent
+  table: incidents + incident_events
+tools:
+  - dispatch       # invoke another agent's workflow
+  - incident-write # create/update incidents table
+  - qdrant-search  # RAG over historical incidents
+  - telegram-notify
+allowlist: security/allowlists/commander.yaml
+mutating: false   # opens/closes incidents only; never touches infra
+escalation:
+  on_loss_of_quorum: human-only
+output:
+  format: structured-json
+  schema: agents/incident-commander/output.schema.json

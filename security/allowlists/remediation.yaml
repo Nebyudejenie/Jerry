@@ -1,0 +1,102 @@
+# =====================================================================
+# THE MUTATING ALLOWLIST.
+# Every entry here is an action the Remediation agent may perform AFTER:
+#   - human approval via Telegram
+#   - system_freeze == false
+#   - dry_run preview executed
+# Default principle: prefer least-impact, reversible operations.
+# =====================================================================
+role: remediation
+mutating: true
+targets: ["*"]
+commands:
+
+  # ── Docker: restart only; never destroy ─────────────────────────────
+  - id: docker-start
+    match: ^docker start [a-zA-Z0-9_.-]+$
+    description: Start an existing container by name. Reversible via docker stop.
+    rollback: docker stop <name>
+    blast_radius: low
+
+  - id: docker-restart
+    match: ^docker restart [a-zA-Z0-9_.-]+$
+    description: Restart a running container.
+    rollback: docker stop <name>
+    blast_radius: low
+
+  - id: docker-stop
+    match: ^docker stop -t (10|30|60) [a-zA-Z0-9_.-]+$
+    description: Stop a container with explicit grace period.
+    rollback: docker start <name>
+    blast_radius: medium
+
+  - id: docker-compose-up
+    match: ^docker compose -f /[a-zA-Z0-9_./-]+ up -d [a-zA-Z0-9_-]+$
+    description: Bring up a specific compose service.
+    rollback: docker compose -f <path> stop <service>
+    blast_radius: medium
+
+  # ── Disk pressure: prune is destructive-of-data-we-don't-need ───────
+  - id: docker-prune-images
+    match: ^docker image prune -af$
+    description: Remove dangling images. Safe.
+    rollback: re-pull from registry
+    blast_radius: low
+
+  - id: docker-prune-system
+    match: ^docker system prune -f$
+    description: Remove unused images, networks, build cache. Skips volumes.
+    rollback: re-pull / rebuild
+    blast_radius: medium
+
+  - id: logrotate-force
+    match: ^logrotate -f /etc/logrotate\.conf$
+    description: Force log rotation.
+    rollback: none (logs rotated)
+    blast_radius: low
+
+  - id: journal-vacuum
+    match: ^journalctl --vacuum-size=(1G|2G|5G)$
+    description: Reduce journal size.
+    rollback: none (logs trimmed)
+    blast_radius: low
+
+  # ── Systemd service control (no edits, only state) ──────────────────
+  - id: systemctl-restart
+    match: ^systemctl restart [a-zA-Z0-9_.@-]+\.service$
+    description: Restart a specific service.
+    rollback: investigate; manual intervention
+    blast_radius: medium
+
+  # ── Proxmox VM control (no destroy) ─────────────────────────────────
+  - id: qm-start
+    match: ^qm start [0-9]+$
+    description: Start a VM by VMID.
+    rollback: qm shutdown <vmid>
+    blast_radius: low
+
+  - id: qm-shutdown
+    match: ^qm shutdown [0-9]+ --timeout 60$
+    description: Graceful VM shutdown.
+    rollback: qm start <vmid>
+    blast_radius: medium
+
+  - id: qm-reboot
+    match: ^qm reboot [0-9]+$
+    description: Reboot a VM.
+    rollback: investigate
+    blast_radius: medium
+
+  # ── Explicitly forbidden patterns (documented for the reviewer) ─────
+  # NOT INCLUDED — must never be in this file:
+  #   docker rm           (destructive)
+  #   docker volume rm    (data loss)
+  #   docker network rm   (cascade)
+  #   rm / mv / cp        (filesystem mutation)
+  #   kill / pkill        (process kill)
+  #   iptables / ufw      (network policy)
+  #   reboot / shutdown   (host control)
+  #   apt / yum / dnf     (package install)
+  #   curl / wget         (data egress)
+  #   chmod / chown       (permission change)
+  #   tar / dd            (bulk fs ops)

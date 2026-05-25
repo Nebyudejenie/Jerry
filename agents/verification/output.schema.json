@@ -1,0 +1,36 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "verification-output",
+  "type": "object",
+  "required": ["incident_id", "verdict", "original_probe", "side_effects", "wall_time_since_remediation_ms"],
+  "additionalProperties": false,
+  "properties": {
+    "incident_id": { "type": "string", "format": "uuid" },
+    "verdict":     { "enum": ["green", "yellow", "red"] },
+    "original_probe": {
+      "type": "object",
+      "required": ["endpoint", "expected", "actual", "match"],
+      "additionalProperties": false,
+      "properties": {
+        "endpoint": { "type": "string" },
+        "expected": { "type": "string" },
+        "actual":   { "type": "string", "maxLength": 2000 },
+        "match":    { "type": "boolean" }
+      }
+    },
+    "side_effects": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["check", "status"],
+        "additionalProperties": false,
+        "properties": {
+          "check":  { "type": "string" },
+          "status": { "enum": ["ok", "warn", "fail"] },
+          "detail": { "type": "string" }
+        }
+      }
+    },
+    "wall_time_since_remediation_ms": { "type": "integer", "minimum": 0 }
+  }
+}

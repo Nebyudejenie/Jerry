@@ -1,0 +1,64 @@
+role: linux-readonly
+mutating: false
+targets: ["*"]
+commands:
+  - id: uptime
+    match: ^uptime$
+  - id: hostname
+    match: ^hostname$
+  - id: uname
+    match: ^uname -a$
+  - id: id
+    match: ^id$
+  - id: who
+    match: ^who$
+  - id: last-n
+    match: ^last -n (10|20|50|100)$
+  - id: df
+    match: ^df -hT$
+  - id: du-top
+    match: ^du -sh /(var|home|opt|tmp)(/[a-zA-Z0-9_.-]+)?$
+  - id: free
+    match: ^free -h$
+  - id: top-batch
+    match: ^top -bn1$
+  - id: ps-aux-head
+    match: ^ps auxf$
+  - id: vmstat
+    match: ^vmstat 1 3$
+  - id: iostat
+    match: ^iostat -xz 1 3$
+  - id: ss-listen
+    match: ^ss -tlnp$
+  - id: ss-est
+    match: ^ss -tunap$
+  - id: ip-brief
+    match: ^ip -br a$
+  - id: ip-route
+    match: ^ip route$
+  - id: ping-4
+    match: ^ping -c 4 [a-zA-Z0-9_.-]+$
+  - id: dig
+    match: ^dig \+short [a-zA-Z0-9_.-]+$
+  - id: traceroute
+    match: ^traceroute -n -m 15 [a-zA-Z0-9_.-]+$
+  - id: journalctl-priority
+    match: ^journalctl -p (0|1|2|3) -xb --no-pager$
+  - id: journalctl-unit
+    match: ^journalctl -u [a-zA-Z0-9_.@-]+ --no-pager -n (50|100|200|500)$
+  - id: systemctl-status
+    match: ^systemctl status [a-zA-Z0-9_.@-]+$
+  - id: systemctl-is-active
+    match: ^systemctl is-active [a-zA-Z0-9_.@-]+$
+  - id: systemctl-list-units-failed
+    match: ^systemctl list-units --failed --no-pager$
+  - id: cat-os-release
+    match: ^cat /etc/os-release$
+  - id: cat-cpuinfo
+    match: ^cat /proc/cpuinfo$
+  - id: cat-meminfo
+    match: ^cat /proc/meminfo$
+  - id: ls-log
+    match: ^ls -lh /var/log(/[a-zA-Z0-9_.-]+)?$
+  - id: tail-log
+    match: ^tail -n (50|100|200|500) /var/log/[a-zA-Z0-9_./-]+$
